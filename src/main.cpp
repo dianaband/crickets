@@ -48,9 +48,8 @@
 #define MESH_PORT 5555
 #define MESH_CHANNEL 5
 // #define MESH_ANCHOR
-#define MSG_LENGTH_MAX   256
 #define LONELY_TO_DIE    (30000)
-//============<parameters>============
+//============</parameters>===========
 
 //
 // LED status indication
@@ -60,6 +59,7 @@
 // phase 1
 //    - LED => slow blinking (syncronized)
 //    - + connected.
+//
 #if defined(ARDUINO_ESP8266_NODEMCU) // nodemcuv2
 #define LED_PIN 2
 #elif defined(ARDUINO_ESP8266_ESP12) // huzzah
@@ -70,13 +70,17 @@
 #define LED_PERIOD (1111)
 #define LED_ONTIME (1)
 
-//
+//arduino
 #include <Arduino.h>
 
-//
-#include <painlessMesh.h>
+//i2c
+#include <Wire.h>
+#define I2C_ADDR 3
+#define POST_LENGTH 32
+#define POST_BUFF_LEN (POST_LENGTH + 1)
 
-// painless mesh
+//painlessmesh
+#include <painlessMesh.h>
 painlessMesh mesh;
 
 //scheduler
@@ -112,7 +116,7 @@ void taskStatusBlink_steadyOff() {
   onFlag = false;
 }
 
-// happy or lonely
+//task #1 : happy or lonely
 //   --> automatic reset after some time of 'loneliness (disconnected from any node)'
 void nothappyalone() {
   static bool isConnected_prev = false;
@@ -135,7 +139,7 @@ void nothappyalone() {
       // esp32 doesn't support 'reset()' yet...
       // (restart() is framework-supported, reset() is more forced hardware-reset-action)
 #else
-#error unknown
+#error unknown esp.
 #endif
     }
   }
@@ -144,11 +148,92 @@ void nothappyalone() {
 }
 Task nothappyalone_task(1000, TASK_FOREVER, &nothappyalone, &runner, true); // by default, ENABLED.
 
+//task #2 : regular post collection
+void collect_post() {
+  //
+  static char letter_outro[POST_BUFF_LEN] = "................................";
+  // ask a letter and collect the feedback.
+  Wire.requestFrom(I2C_ADDR, POST_LENGTH);
+  // error flag
+  bool letter_is_good = false;
+  // check the first byte
+  char first = '.';
+  // automatically match start byte.
+  while (Wire.available()) {
+    first = Wire.read();
+    if (first == '[') {
+      // client want to give me a letter.
+      letter_outro[0] = first;
+      // matched!
+      letter_is_good = true;
+      break;
+    } else if (first == ' ') {
+      // client says nothing to send.
+      Serial.print("."); // nothing to send.
+      return;
+    }
+  }
+  //
+  if (letter_is_good == false) {
+    // no more letters, but no valid char.
+    Serial.print("?"); // wrong client.
+    return;
+  } else if (letter_is_good == true) {
+    // get more contents
+    for (int i = 1; i < (POST_LENGTH-1); i++) {
+      if (Wire.available()) {
+        letter_outro[i] = Wire.read();
+      } else {
+        // hmm.. letter is too short.
+        letter_outro[i] = '.'; // fill-out with dots.
+        Serial.print("$"); // too $hort msg.
+        letter_is_good = false;
+      }
+    }
+    // the last byte
+    char last = '.';
+    if (Wire.available()) {
+      letter_outro[POST_LENGTH-1] = last = Wire.read();
+      if (last != ']') {
+        // hmm.. last byte is strange
+        Serial.print("#"); // last byte error.
+        letter_is_good = false;
+      }
+    } else {
+      // hmm.. letter is too short.
+      letter_outro[POST_LENGTH-1] = '.'; // fill-out with dots.
+      Serial.print("$"); // too $hort msg.
+      letter_is_good = false;
+    }
+    // terminal char.
+    letter_outro[POST_LENGTH] = '\0';
+  }
+  // no good letter, we discard.
+  if (letter_is_good == false) {
+    return;
+  }
+  // or, post it.
+  if (isConnected == true) {
+    mesh.sendBroadcast(String(letter_outro));
+    Serial.print("sendBroadcast: ");
+    Serial.println(letter_outro);
+  } else {
+    Serial.print("_"); // disconnected.
+  }
+}
+Task collect_post_task(10, TASK_FOREVER, &collect_post, &runner, true); // by default, ENABLED
+//MAYBE... 10ms is too fast? move this to the loop() then?
+
 // mesh callbacks
 void receivedCallback(uint32_t from, String & msg) { // REQUIRED
-  // give it to I2C device
-  /////
-  Serial.print("Got one.");
+  Serial.print("got msg.: ");
+  Serial.println(msg);
+  // truncate any extra. letters.
+  msg = msg.substring(0, POST_LENGTH); // (0) ~ (POST_LENGTH-1)
+  // send whatever letter we postmans trust other postman.
+  Wire.beginTransmission(I2C_ADDR);
+  Wire.write(msg.c_str());
+  Wire.endTransmission();
 }
 void changedConnectionCallback() {
   // check status -> modify status LED
@@ -171,7 +256,7 @@ void changedConnectionCallback() {
   }
   // let I2C device know
   /////
-  Serial.println("Conn. change.");
+  Serial.println("hi. client, we ve got a change in the net.");
 }
 void newConnectionCallback(uint32_t nodeId) {
   changedConnectionCallback();
@@ -213,7 +298,7 @@ void setup() {
   delay(100);
   Serial.println("hi, postman ready.");
 #if defined(DISABLE_AP)
-  Serial.println("INFO: we are in the WIFI_STA mode!");
+  Serial.println("!NOTE!: we are in the WIFI_STA mode!");
 #endif
 
   //understanding what is 'the nodeId' ==> last 4 bytes of 'softAPmacAddress'
@@ -246,8 +331,8 @@ void setup() {
   // nodeId (hex) : 2D370A07
   // MAC : B6, E6, 2D, 37, A, 7
 
-  //i2c
-  Serial.println("TODO. we need to setup I2C.");
+  //i2c master
+  Wire.begin();
 }
 
 void loop() {
