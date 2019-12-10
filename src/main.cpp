@@ -1,25 +1,83 @@
 //
-// Exhibition @ exhibition-space
-//   <one and twelve one-hundred-eighth seconds at the prince's room>
-//
-// Feb. 11 @ 2019
+// wirelessly connected cloud (Wireless Mesh Networking)
+// MIDI-like
+// spacial
+// sampler keyboard
 //
 
-// the common sense
-#include "common.h"
-
-#if (IDENTITY == ID_SPEAK_A)
-#include "../members/speaker_a.cpp"
 //
+// COSMO40 @ Incheon w/ Factory2
+// RTA @ Seoul w/ Post Territory Ujeongguk
+//
+
+//
+// 2019 12 10
+//
+// (part-1) esp8266 : 'postman' (the mesh network nodes)
+//
+//   this module will build up a mesh cloud.
+//
+//   for now, ESP-MESH is out there.
+//   which is probably more complete impl. of this kind.
+//   but that's only for esp32, not for esp8266
+//   we want to use esp8266, so, we will use painlessMesh
+//   which is also good.
+//
+//   for painlessMesh, a node is a JSON 'postman'
+//   we can broadcast/unicast/recv. msg. w/ meshID and nodelist
+//   so, let's just use it.
+//
+//   but one specific thing is that we will use I2C comm. to feed this postman.
+//   and I2C is a FIXED-length msg.
+//   so, at least, we need to fix this length of the msg.
+//   otherwise, we need to do variable-length comm. like uart. to feed/fetch msg. from postman.
+//
+//   well, okay. but, let's just do.. I2C. and fix a length.
+//   maybe, ... 32 bytes?
+//   so, then, this postman will read/write I2C channel. always.. 32 bytes.
+//   and then, this 32 bytes will be flying in the clouds.
+//
+
+//==========<configuration>===========
+// #define DISABLE_AP
+//==========</configuration>==========
+
+//============<parameters>============
+#define MESH_SSID "cricket-crackers"
+#define MESH_PASSWORD "cc*vvvv/kkk"
+#define MESH_PORT 5555
+#define MESH_CHANNEL 5
+// #define MESH_ANCHOR
+#define MSG_LENGTH_MAX   256
+#define LONELY_TO_DIE    (30000)
+//============<parameters>============
+
+//
+// LED status indication
+// phase 0
+//    - LED => steady on
+//    - booted. and running. no connection. scanning.
+// phase 1
+//    - LED => slow blinking (syncronized)
+//    - + connected.
+#if defined(ARDUINO_ESP8266_NODEMCU) // nodemcuv2
+#define LED_PIN 2
+#elif defined(ARDUINO_ESP8266_ESP12) // huzzah
+#define LED_PIN 2
+#elif defined(ARDUINO_FEATHER_ESP32) // featheresp32
+#define LED_PIN 13
 #endif
+#define LED_PERIOD (1111)
+#define LED_ONTIME (1)
+
+//
+#include <Arduino.h>
+
+//
+#include <painlessMesh.h>
 
 // painless mesh
 painlessMesh mesh;
-
-// firmata
-#if (FIRMATA_USE == FIRMATA_ON)
-#include <Firmata.h>
-#endif
 
 //scheduler
 Scheduler runner;
@@ -30,23 +88,17 @@ bool isConnected = false;
 //prototypes
 void taskStatusBlink_steadyOn();
 void taskStatusBlink_slowblink_insync();
-void taskStatusBlink_fastblink();
 void taskStatusBlink_steadyOff();
 //the task
 Task statusblinks(0, 1, &taskStatusBlink_steadyOn); // at start, steady on. default == disabled. ==> setup() will enable.
-// when disconnected, steadyon.
+// when disconnected, and trying, steadyon.
 void taskStatusBlink_steadyOn() {
   onFlag = true;
 }
-// blink per 1s. sync-ed.
+// when connected, blink per 1s. sync-ed. (== default configuration)
 void taskStatusBlink_slowblink_insync() {
   // toggler
-  if (onFlag) {
-    onFlag = false;
-  }
-  else {
-    onFlag = true;
-  }
+  onFlag = !onFlag;
   // on-time
   statusblinks.delay(LED_ONTIME);
   // re-enable & sync.
@@ -55,9 +107,7 @@ void taskStatusBlink_slowblink_insync() {
     statusblinks.enableDelayed(LED_PERIOD - (mesh.getNodeTime() % (LED_PERIOD*1000))/1000); //re-enable with sync-ed delay
   }
 }
-void taskStatusBlink_fastblink() {
-}
-// when connected, steadyoff. (?)
+// when connected, steadyoff. (== alternative configuration)
 void taskStatusBlink_steadyOff() {
   onFlag = false;
 }
@@ -78,10 +128,14 @@ void nothappyalone() {
       // okay. i m fed up. bye the world.
       Serial.println("okay. i m fed up. bye the world.");
       Serial.println();
-#if (BOARD_SELECT == BOARD_NODEMCU_ESP12E)
+#if defined(ESP8266)
       ESP.reset();
-#elif (BOARD_SELECT == BOARD_NODEMCU_ESP32)
-      ESP.restart(); // esp32 doesn't support 'reset()' yet... (restart() is framework-supported, reset() is more forced hardware-reset-action)
+#elif defined(ESP32)
+      ESP.restart();
+      // esp32 doesn't support 'reset()' yet...
+      // (restart() is framework-supported, reset() is more forced hardware-reset-action)
+#else
+#error unknown
 #endif
     }
   }
@@ -92,8 +146,9 @@ Task nothappyalone_task(1000, TASK_FOREVER, &nothappyalone, &runner, true); // b
 
 // mesh callbacks
 void receivedCallback(uint32_t from, String & msg) { // REQUIRED
-  // let the member device know.
-  gotMessageCallback(from, msg);
+  // give it to I2C device
+  /////
+  Serial.print("Got one.");
 }
 void changedConnectionCallback() {
   // check status -> modify status LED
@@ -114,30 +169,26 @@ void changedConnectionCallback() {
     //
     isConnected = false;
   }
-  // let the member device know.
-  gotChangedConnectionCallback();
+  // let I2C device know
+  /////
+  Serial.println("Conn. change.");
 }
 void newConnectionCallback(uint32_t nodeId) {
   changedConnectionCallback();
 }
 
-void setup_member();
 void setup() {
   //led
   pinMode(LED_PIN, OUTPUT);
 
   //mesh
   WiFiMode_t node_type = WIFI_AP_STA;
-#if (NODE_TYPE == NODE_TYPE_STA_ONLY)
+#if defined(DISABLE_AP)
   system_phy_set_max_tpw(0);
   node_type = WIFI_STA;
 #endif
-#if (FIRMATA_USE == FIRMATA_ON)
-  mesh.setDebugMsgTypes( ERROR );
-#elif (FIRMATA_USE == FIRMATA_OFF)
   // mesh.setDebugMsgTypes(ERROR | DEBUG | CONNECTION);
   mesh.setDebugMsgTypes( ERROR | STARTUP );
-#endif
   mesh.init(MESH_SSID, MESH_PASSWORD, &runner, MESH_PORT, node_type, MESH_CHANNEL);
 
   //
@@ -145,7 +196,7 @@ void setup() {
   // void init(String ssid, String password, uint16_t port = 5555, WiFiMode_t connectMode = WIFI_AP_STA, uint8_t channel = 1, uint8_t hidden = 0, uint8_t maxconn = MAX_CONN);
   //
 
-#ifdef MESH_ANCHOR
+#if defined(MESH_ANCHOR)
   mesh.setContainsRoot(true);
 #endif
   //callbacks
@@ -157,20 +208,12 @@ void setup() {
   runner.addTask(statusblinks);
   statusblinks.enable();
 
-#if (FIRMATA_USE == FIRMATA_ON)
-  Firmata.setFirmwareVersion(0,1);
-  Firmata.attach(ANALOG_MESSAGE, analogWriteCallback);
-  Firmata.begin(57600);
-#elif (FIRMATA_USE == FIRMATA_OFF)
   //serial
   Serial.begin(9600);
   delay(100);
-  Serial.println("setup done.");
-  Serial.print("IDENTITY: ");
-  Serial.println(IDENTITY);
-#if (NODE_TYPE == NODE_TYPE_STA_ONLY)
+  Serial.println("hi, postman ready.");
+#if defined(DISABLE_AP)
   Serial.println("INFO: we are in the WIFI_STA mode!");
-#endif
 #endif
 
   //understanding what is 'the nodeId' ==> last 4 bytes of 'softAPmacAddress'
@@ -203,22 +246,16 @@ void setup() {
   // nodeId (hex) : 2D370A07
   // MAC : B6, E6, 2D, 37, A, 7
 
-  //setup_member
-  setup_member();
+  //i2c
+  Serial.println("TODO. we need to setup I2C.");
 }
 
 void loop() {
   runner.execute();
   mesh.update();
-#if (BOARD_SELECT == BOARD_NODEMCU_ESP32)
+#if defined(ESP32)
   digitalWrite(LED_PIN, onFlag); // value == true is ON.
 #else
   digitalWrite(LED_PIN, !onFlag); // value == false is ON. so onFlag == true is ON. (pull-up)
-#endif
-
-#if (FIRMATA_USE == FIRMATA_ON)
-  while (Firmata.available()) {
-    Firmata.processInput();
-  }
 #endif
 }
