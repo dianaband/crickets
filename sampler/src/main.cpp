@@ -1,12 +1,28 @@
+//
+// wirelessly connected cloud (Wireless Mesh Networking)
+// MIDI-like
+// spacial
+// sampler keyboard
+//
+
+//
+// COSMO40 @ Incheon w/ Factory2
+// RTA @ Seoul w/ Post Territory Ujeongguk
+//
+
+//
+// 2019 12 11
+//
+// (part-3) teensy35 : 'client:sampler' (mesh post --> play sounds)
+//
+
 //HACK: let auto-poweroff speakers stay turned ON! - (creative muvo mini)
 #define IDLE_FREQ 22000
 #define IDLE_AMP 0 // --> creative muvo 2 doesn't need this. they just stay on!
 
 //i2c
 #include <Wire.h>
-#define I2C_ADDR 3
-#define POST_LENGTH 32
-#define POST_BUFF_LEN (POST_LENGTH + 1)
+#include "../post_sampler.h"
 
 //teensy audio
 #include <Audio.h>
