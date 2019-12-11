@@ -230,7 +230,7 @@ void receivedCallback(uint32_t from, String & msg) { // REQUIRED
   msg = msg.substring(0, POST_LENGTH); // (0) ~ (POST_LENGTH-1)
   // send whatever letter we postmans trust other postman.
   Wire.beginTransmission(I2C_ADDR);
-  Wire.write(msg.c_str());
+  Wire.write(msg.c_str(), POST_LENGTH);
   Wire.endTransmission();
 }
 void changedConnectionCallback() {
