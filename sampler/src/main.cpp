@@ -20,14 +20,12 @@
 #define IDLE_FREQ 22000
 #define IDLE_AMP 0 // --> creative muvo 2 doesn't need this. they just stay on!
 
-//i2c
-#include <Wire.h>
-#include "../post_sampler.h"
-
 //teensy audio
 #include <Audio.h>
-#include <SPI.h>
-#include <SD.h>
+// #include <SPI.h>
+// #include <SD.h>
+#include <SdFat.h>
+SdFatSdioEX SD;
 #include <SerialFlash.h>
 
 //teensy 3.5 with SD card
@@ -56,10 +54,9 @@ AudioConnection patchCord8(amp2, 0, dacs1, 1);
 //task
 #include <TaskScheduler.h>
 Scheduler runner;
-//song #
+//sample #
 int sample_now = 0; //0~99
-//
-void sound_player_start()
+void sample_player_start()
 {
   //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
   char filename[13] = "NN.WAV";
@@ -69,23 +66,45 @@ void sound_player_start()
   filename[1] = '0' + (limit % 10);       // N[N].WAV
   //TEST
   Serial.println(filename);
+  AudioNoInterrupts();
+  bool test = SD.exists(filename);
+  AudioInterrupts();
+  if (!test) {
+    Serial.println("... does not exist.");
+    return;
+  }
   //start the player!
   //NOTE: block out 're-triggering'
-  if (playSdWav1.isPlaying() == false) {
-    playSdWav1.play(filename);
-  }
+  // if (playSdWav1.isPlaying() == false) {
+  playSdWav1.play(filename);
+  // }
   //mark the indicator : HIGH: ON
-  // digitalWrite(13, HIGH);
+  digitalWrite(13, HIGH);
   //to wait a bit for updating isPlaying()
   delay(10);
 }
-void sound_player_stop() {
+void sample_player_stop() {
+  //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
+  char filename[13] = "NN.WAV";
+  //search for the sound file
+  int limit = (sample_now % 100);       // 0~99
+  filename[0] = '0' + (limit / 10);       // [N]N.WAV
+  filename[1] = '0' + (limit % 10);       // N[N].WAV
+  //TEST
+  Serial.println(filename);
+  AudioNoInterrupts();
+  bool test = SD.exists(filename);
+  AudioInterrupts();
+  if (!test) {
+    Serial.println("... does not exist.");
+    return;
+  }
   //stop the player.
   if (playSdWav1.isPlaying() == true) {
     playSdWav1.stop();
   }
 }
-void sound_player_check() {
+void sample_player_check() {
   if (playSdWav1.isPlaying() == false) {
     //mark the indicator : LOW: OFF
     digitalWrite(13, LOW);
@@ -98,28 +117,29 @@ void sound_player_check() {
   }
 }
 //
-Task sound_player_start_task(0, TASK_ONCE, sound_player_start);
-Task sound_player_stop_task(0, TASK_ONCE, sound_player_stop);
-Task sound_player_check_task(0, TASK_FOREVER, sound_player_check, &runner, true);
+Task sample_player_start_task(0, TASK_ONCE, sample_player_start);
+Task sample_player_stop_task(0, TASK_ONCE, sample_player_stop);
+Task sample_player_check_task(0, TASK_FOREVER, sample_player_check, &runner, true);
 
 //i2c
 #include <Wire.h>
-void requestEvent() {
-  Wire.write(" "); // no letter to send
-}
+#include "../post_sampler.h"
+// DISABLED.. due to bi-directional I2C hardship. ==> use UART.
+// void requestEvent() {
+//   Wire.write(" "); // no letter to send
+// }
 void receiveEvent(int numBytes) {
   //numBytes : how many bytes received(==available)
   static char letter_intro[POST_BUFF_LEN] = "................................";
 
   // Serial.println("[i2c] on receive!");
-
   int nb = Wire.readBytes(letter_intro, POST_LENGTH);
-  Serial.println(letter_intro);
 
   if (POST_LENGTH == nb) {
 
     //convert to String
     String msg = String(letter_intro);
+    Serial.println(msg);
 
     //parse letter string.
 
@@ -139,6 +159,9 @@ void receiveEvent(int numBytes) {
     String str_key = msg.substring(1, 4);
     String str_velocity = msg.substring(4, 7);
     String str_gate = msg.substring(7, 8);
+    // Serial.println(str_key);
+    // Serial.println(str_velocity);
+    // Serial.println(str_gate);
 
     //
     int key = str_key.toInt();
@@ -151,9 +174,11 @@ void receiveEvent(int numBytes) {
     //
     int gate = str_gate.toInt();
     if (gate == 0) {
-      sound_player_stop_task.restart();
+      sample_player_stop_task.restart();
+      Serial.println("sample_player_stop_task");
     } else {
-      sound_player_start_task.restart();
+      sample_player_start_task.restart();
+      Serial.println("sample_player_start_task");
     }
   }
 }
@@ -165,7 +190,7 @@ void printDirectory(File dir, int numTabs) {
     File entry =  dir.openNextFile();
     if (!entry) {
       // no more files
-      //Serial.println("**nomorefiles**");
+      Serial.println("**nomorefiles**");
       break;
     }
     for (uint8_t i=0; i<numTabs; i++) {
@@ -189,17 +214,19 @@ File root;
 void setup() {
 
   //serial monitor
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(50);
 
   //i2c
   Wire.begin(I2C_ADDR);
   Wire.onReceive(receiveEvent);
-  Wire.onRequest(requestEvent);
+  // DISABLED.. due to bi-directional I2C hardship. ==> use UART.
+  // Wire.onRequest(requestEvent);
 
   //SD - AudioPlaySdWav @ teensy audio library needs SD.begin() first. don't forget/ignore!
   //+ let's additionally check contents of SD.
-  if (!SD.begin(BUILTIN_SDCARD)) {
+  if (!SD.begin()) {
+    // if (!SD.begin(BUILTIN_SDCARD)) {
     Serial.println("[sd] initialization failed!");
     return;
   }
@@ -228,8 +255,8 @@ void setup() {
   digitalWrite(13, LOW); // LOW: OFF
 
   //player task
-  runner.addTask(sound_player_start_task);
-  runner.addTask(sound_player_stop_task);
+  runner.addTask(sample_player_start_task);
+  runner.addTask(sample_player_stop_task);
 
   //
   Serial.println("[setup] done.");
@@ -238,36 +265,3 @@ void setup() {
 void loop() {
   runner.execute();
 }
-
-////
-// postman - bi-directional protocol test code backup
-
-// #include <Wire.h>
-// const int16_t I2C_ADDR = 3;
-//
-// void receiveEvent(int howMany) {
-//   (void) howMany;
-//   while (1 < Wire.available()) {
-//     char c = Wire.read();
-//     Serial.print(c);
-//   }
-//   char x = Wire.read();
-//   Serial.println(x);
-// }
-//
-// void requestEvent() {
-//   if (random(1000) == 0) {
-//     Wire.write("[bcdefghabcdefghabcdefghabcdefg]"); //32 bytes
-//   } else {
-//     Wire.write(" "); // no letter to send
-//   }
-// }
-//
-// void setup() {
-//   Wire.begin(I2C_ADDR);
-//   Wire.onRequest(requestEvent);
-//   Wire.onReceive(receiveEvent);
-// }
-//
-// void loop() {
-// }

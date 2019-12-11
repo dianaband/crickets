@@ -39,7 +39,18 @@
 //
 
 //==========<configuration>===========
-// #define DISABLE_AP
+#define DISABLE_AP
+// --> disabling AP is for teensy audio samplers.
+//     they need this to reduce noise from AP beacon signals.
+//     but, then they cannot build-up net. by themselves.
+//     we need who can do AP..
+// ==> TODO! just prepare some 'dummy' postmans around. w/ AP activated.
+#define DISABLE_I2C_REQ
+// --> a quirk.. due to bi-directional I2C hardship.
+//     ideally, we want to make this sampler node also speak.
+//     but, I2C doesn't work. maybe middleware bug.. we later want to change to diff. proto.
+//     for example, UART or so.
+// ==> BEWARE! yet, still we need to take off this.. for 'osc' node.
 //==========</configuration>==========
 
 //============<parameters>============
@@ -147,6 +158,7 @@ void nothappyalone() {
 Task nothappyalone_task(1000, TASK_FOREVER, &nothappyalone, &runner, true); // by default, ENABLED.
 
 //task #2 : regular post collection
+#if !defined(DISABLE_I2C_REQ)
 void collect_post() {
   //
   static char letter_outro[POST_BUFF_LEN] = "................................";
@@ -221,6 +233,7 @@ void collect_post() {
 }
 Task collect_post_task(10, TASK_FOREVER, &collect_post, &runner, true); // by default, ENABLED
 //MAYBE... 10ms is too fast? move this to the loop() then?
+#endif
 
 // mesh callbacks
 void receivedCallback(uint32_t from, String & msg) { // REQUIRED
@@ -292,7 +305,7 @@ void setup() {
   statusblinks.enable();
 
   //serial
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(100);
   Serial.println("hi, postman ready.");
 #if defined(DISABLE_AP)
