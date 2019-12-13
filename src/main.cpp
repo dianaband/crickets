@@ -44,13 +44,18 @@
 //     they need this to reduce noise from AP beacon signals.
 //     but, then they cannot build-up net. by themselves.
 //     we need who can do AP..
-// ==> TODO! just prepare some 'dummy' postmans around. w/ AP activated.
+//     ==> TODO! just prepare some 'dummy' postmans around. w/ AP activated.
 #define DISABLE_I2C_REQ
 // --> a quirk.. due to bi-directional I2C hardship.
 //     ideally, we want to make this sampler node also speak.
 //     but, I2C doesn't work. maybe middleware bug.. we later want to change to diff. proto.
 //     for example, UART or so.
-// ==> BEWARE! yet, still we need to take off this.. for 'osc' node.
+//     ==> BEWARE! yet, still we need to take off this.. for 'osc' node.
+// #define SET_ROOT
+#define SET_CONTAINSROOT
+// --> for the network stability
+//     declare 1 root node and branches(constricted to 'contains the root')
+//     to improve the stability of the net
 //==========</configuration>==========
 
 //============<parameters>============
@@ -58,8 +63,7 @@
 #define MESH_PASSWORD "cc*vvvv/kkk"
 #define MESH_PORT 5555
 #define MESH_CHANNEL 5
-// #define MESH_ANCHOR
-#define LONELY_TO_DIE    (30000)
+#define LONELY_TO_DIE    (1000)
 //============</parameters>===========
 
 //
@@ -155,7 +159,8 @@ void nothappyalone() {
   //
   isConnected_prev = isConnected;
 }
-Task nothappyalone_task(1000, TASK_FOREVER, &nothappyalone, &runner, true); // by default, ENABLED.
+// Task nothappyalone_task(1000, TASK_FOREVER, &nothappyalone, &runner, true); // by default, ENABLED.
+Task nothappyalone_task(100, TASK_FOREVER, &nothappyalone); // by default, ENABLED.
 
 //task #2 : regular post collection
 #if !defined(DISABLE_I2C_REQ)
@@ -247,6 +252,7 @@ void receivedCallback(uint32_t from, String & msg) { // REQUIRED
   Wire.endTransmission();
 }
 void changedConnectionCallback() {
+  Serial.println(mesh.getNodeList().size());
   // check status -> modify status LED
   if (mesh.getNodeList().size() > 0) {
     // (still) connected.
@@ -257,6 +263,8 @@ void changedConnectionCallback() {
     Serial.println("connected!");
     //
     isConnected = true;
+    runner.addTask(nothappyalone_task);
+    nothappyalone_task.enable();
   }
   else {
     // disconnected!!
@@ -270,6 +278,8 @@ void changedConnectionCallback() {
   Serial.println("hi. client, we ve got a change in the net.");
 }
 void newConnectionCallback(uint32_t nodeId) {
+  Serial.println(mesh.getNodeList().size());
+  Serial.println("newConnectionCallback.");
   changedConnectionCallback();
 }
 
@@ -292,13 +302,17 @@ void setup() {
   // void init(String ssid, String password, uint16_t port = 5555, WiFiMode_t connectMode = WIFI_AP_STA, uint8_t channel = 1, uint8_t hidden = 0, uint8_t maxconn = MAX_CONN);
   //
 
-#if defined(MESH_ANCHOR)
+#if defined(SET_ROOT)
+  mesh.setRoot(true);
+#endif
+#if defined(SET_CONTAINSROOT)
   mesh.setContainsRoot(true);
 #endif
   //callbacks
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
   mesh.onChangedConnections(&changedConnectionCallback);
+  Serial.println(mesh.getNodeList().size());
 
   //tasks
   runner.addTask(statusblinks);

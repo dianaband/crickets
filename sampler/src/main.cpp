@@ -236,7 +236,10 @@ void setup() {
 
   //audio
   AudioMemory(20);
+#if !defined(TEENSY36)
+  //NOTE!! teensy36 board.. output broken? .. so disable this for teensy36.. this is the cause??
   dacs1.analogReference(EXTERNAL);
+#endif
   mixer1.gain(0,1.0);
   mixer1.gain(1,1.0);
   mixer1.gain(2,0);
