@@ -236,6 +236,7 @@ void setup() {
 
   //audio
   AudioMemory(20);
+  dacs1.analogReference(EXTERNAL);
   mixer1.gain(0,1.0);
   mixer1.gain(1,1.0);
   mixer1.gain(2,0);
