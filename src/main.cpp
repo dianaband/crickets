@@ -75,9 +75,6 @@
 #elif 0
 #define DISABLE_AP
 #define DISABLE_I2C_REQ
-// (4) network monitor
-#elif 0
-#define SET_CONTAINSROOT
 //
 #endif
 //==========</preset>==========
