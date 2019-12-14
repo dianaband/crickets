@@ -38,25 +38,49 @@
 //   and then, this 32 bytes will be flying in the clouds.
 //
 
-//==========<configuration>===========
-#define DISABLE_AP
+//==========<configurations>===========
+//
+// 'DISABLE_AP'
 // --> disabling AP is for teensy audio samplers.
 //     they need this to reduce noise from AP beacon signals.
 //     but, then they cannot build-up net. by themselves.
 //     we need who can do AP..
 //     ==> TODO! just prepare some 'dummy' postmans around. w/ AP activated.
-#define DISABLE_I2C_REQ
+//
+// 'DISABLE_I2C_REQ'
 // --> a quirk.. due to bi-directional I2C hardship.
 //     ideally, we want to make this sampler node also speak.
 //     but, I2C doesn't work. maybe middleware bug.. we later want to change to diff. proto.
 //     for example, UART or so.
 //     ==> BEWARE! yet, still we need to take off this.. for 'osc' node.
-// #define SET_ROOT
-#define SET_CONTAINSROOT
+//
+// 'SET_ROOT'
+// 'SET_CONTAINSROOT'
 // --> for the network stability
 //     declare 1 root node and branches(constricted to 'contains the root')
 //     to improve the stability of the net
-//==========</configuration>==========
+//
+//==========</configurations>==========
+
+//==========<preset>===========
+// (1) the backbone AP
+#if 1
+#define DISABLE_I2C_REQ
+#define SET_CONTAINSROOT
+// (2) osc client (the ROOT)
+#elif 0
+#define SET_ROOT
+#define SET_CONTAINSROOT
+// (3) sampler client
+#elif 0
+#define DISABLE_AP
+#define DISABLE_I2C_REQ
+// (4) network monitor
+#elif 0
+#define SET_CONTAINSROOT
+//
+#endif
+//==========</preset>==========
 
 //============<parameters>============
 #define MESH_SSID "cricket-crackers"
