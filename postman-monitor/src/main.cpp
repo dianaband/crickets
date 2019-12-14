@@ -50,6 +50,10 @@ void register_nodes(){
   registered[0xABB3B68F] = NTYPE_POSTMAN;
   registered[0xC2B2AFD4] = NTYPE_POSTMAN;
   registered[0xABB3B758] = NTYPE_POSTMAN;
+  registered[0xABB3B5C2] = NTYPE_POSTMAN;
+  registered[0xC21474D2] = NTYPE_POSTMAN;
+  registered[0xABB3B4B8] = NTYPE_POSTMAN;
+  registered[0x2D370A07] = NTYPE_POSTMAN;
 }
 //============</registered-nodelist>===========
 
@@ -122,6 +126,8 @@ const int hh = 20;
 void loop_screen() {
   static bool first = true;
   int idx = 0;
+  int cnt_postman = 0;
+  int cnt_samplers = 0;
   //the nodelist
   std::list<uint32_t> nodelist = mesh.getNodeList();
   auto it_nodelist = nodelist.begin();
@@ -167,9 +173,11 @@ void loop_screen() {
               break;
             case NTYPE_POSTMAN:
               indicator_color = HX8357_BLUE;
+              cnt_postman++;
               break;
             case NTYPE_SAMPLER:
               indicator_color = HX8357_CYAN;
+              cnt_samplers++;
               break;
             case NTYPE_GASTANK:
               indicator_color = HX8357_GREEN;
@@ -187,7 +195,7 @@ void loop_screen() {
             // sth. not registered.
             tft.drawCircle(boxx, boxy, box, HX8357_BLUE);
             Serial.print("ufo. - 0x");
-            Serial.print(*it_nodelist, HEX);
+            Serial.println(*it_nodelist, HEX);
           }
           //
           it_nodelist++;
@@ -198,7 +206,21 @@ void loop_screen() {
     }
   }
   //
+  tft.fillRect(50, 210, 30, 30, HX8357_BLACK);
+  tft.setCursor(50, 210);
+  tft.setTextColor(HX8357_BLUE);
+  tft.setTextSize(3);
+  tft.print(cnt_postman);
+  //
+  tft.fillRect(250, 210, 30, 30, HX8357_BLACK);
+  tft.setCursor(250, 210);
+  tft.setTextColor(HX8357_CYAN);
+  tft.setTextSize(3);
+  tft.print(cnt_samplers);
+  //
   first = false;
+  //
+  Serial.println();
 }
 Task loop_screen_task(1000, TASK_FOREVER, &loop_screen, &runner, false); // fps : 1hz
 
