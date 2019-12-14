@@ -105,6 +105,8 @@
 #define LED_PIN 2
 #elif defined(ARDUINO_FEATHER_ESP32) // featheresp32
 #define LED_PIN 13
+#elif defined(ARDUINO_NodeMCU_32S) // nodemcu-32s
+#define LED_PIN 2
 #endif
 #define LED_PERIOD (1111)
 #define LED_ONTIME (1)
@@ -272,7 +274,11 @@ void receivedCallback(uint32_t from, String & msg) { // REQUIRED
   msg = msg.substring(0, POST_LENGTH); // (0) ~ (POST_LENGTH-1)
   // send whatever letter we postmans trust other postman.
   Wire.beginTransmission(I2C_ADDR);
+#if defined(ARDUINO_NodeMCU_32S)
+  Wire.write((const uint8_t*)msg.c_str(), POST_LENGTH);
+#else
   Wire.write(msg.c_str(), POST_LENGTH);
+#endif
   Wire.endTransmission();
 }
 void changedConnectionCallback() {

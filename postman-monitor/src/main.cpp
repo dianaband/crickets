@@ -54,6 +54,7 @@ void register_nodes(){
   registered[0xC21474D2] = NTYPE_POSTMAN;
   registered[0xABB3B4B8] = NTYPE_POSTMAN;
   registered[0x2D370A07] = NTYPE_POSTMAN;
+  registered[0xBFFBDD7D] = NTYPE_POSTMAN;
 }
 //============</registered-nodelist>===========
 
