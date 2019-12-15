@@ -45,8 +45,11 @@
 #define NTYPE_BUOY_FLY   0xEEEEEEE6
 std::map<uint32_t, uint32_t> registered;
 void register_nodes(){
-  registered[0x2D9EC96E] = NTYPE_MONITOR;
-  registered[0x3A58872D] = NTYPE_OSC_ROOT;
+  registered[0x2D9EC96E] = NTYPE_MONITOR; // this one.
+  registered[0x2D37150B] = NTYPE_MONITOR; // sub-monitor (old one)
+
+  registered[0x2219A51C] = NTYPE_OSC_ROOT;
+
   registered[0xABB3B68F] = NTYPE_POSTMAN;
   registered[0xC2B2AFD4] = NTYPE_POSTMAN;
   registered[0xABB3B758] = NTYPE_POSTMAN;
@@ -55,6 +58,28 @@ void register_nodes(){
   registered[0xABB3B4B8] = NTYPE_POSTMAN;
   registered[0x2D370A07] = NTYPE_POSTMAN;
   registered[0xBFFBDD7D] = NTYPE_POSTMAN; //esp32 postman
+  registered[0xABB3B9B4] = NTYPE_POSTMAN;
+  registered[0x2D3718AE] = NTYPE_POSTMAN;
+  registered[0xABB3BA44] = NTYPE_POSTMAN;
+
+  registered[0x2D3745F5] = NTYPE_SAMPLER;
+  registered[0x2218D91E] = NTYPE_SAMPLER;
+  registered[0xBC631984] = NTYPE_SAMPLER;
+  registered[0x22199605] = NTYPE_SAMPLER;
+  registered[0x3AD53EF3] = NTYPE_SAMPLER;
+  registered[0x3AD74D97] = NTYPE_SAMPLER;
+  registered[0xABB3B419] = NTYPE_SAMPLER;
+  registered[0xABB3B4DD] = NTYPE_SAMPLER;
+  registered[0x2D373B90] = NTYPE_SAMPLER;
+
+  registered[0x2219ACD1] = NTYPE_SAMPLER; // round (old)
+  registered[0x2219A4A7] = NTYPE_SAMPLER; // round (old)
+  registered[0x22199CAD] = NTYPE_SAMPLER; // round (old)
+  registered[0x2218DEE3] = NTYPE_SAMPLER; // round (old)
+  registered[0x2218DFD5] = NTYPE_SAMPLER; // round (old)
+
+  registered[0x2D371730] = NTYPE_GASTANK;
+  registered[0x3A588030] = NTYPE_BUOY_FLY;
 }
 //============</registered-nodelist>===========
 

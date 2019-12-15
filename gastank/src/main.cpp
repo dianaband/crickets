@@ -43,7 +43,7 @@
 //==========</preset>==========
 
 //============<gastank>============
-#define GASTANK_KEY 60
+#define GASTANK_KEY 100
 //============</gastank>===========
 
 //============<parameters>============

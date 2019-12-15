@@ -43,7 +43,7 @@
 //==========</preset>==========
 
 //============<buoyfly>============
-#define BUOYFLY_KEY 62
+#define BUOYFLY_KEY 101
 //============</buoyfly>===========
 
 //============<parameters>============
