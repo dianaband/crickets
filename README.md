@@ -24,6 +24,7 @@
   - esp32 postman was added.. in yesterday's performance.
   - well.. but the network became quite unstable.. it was kind of unsatisfactory.
   - not sure is this esp32 injection caused this or not?
+  - (or... also note that we have enabled ROOT/CONSTAINS_ROOT at some [point](https://github.com/dianaband/crickets/commit/33df8c26b74fe89994ad45532576014340101177))
   - woo... anyway this is really frustrating .. always..
   - i need a proper working-good system to build up sth. reliable.
   - esp32 based mesh is better? (ESP-MESH)
