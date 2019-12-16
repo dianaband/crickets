@@ -61,6 +61,7 @@ void register_nodes(){
   registered[0xABB3B9B4] = NTYPE_POSTMAN;
   registered[0x2D3718AE] = NTYPE_POSTMAN;
   registered[0xABB3BA44] = NTYPE_POSTMAN;
+  registered[0xBFFD7FF1] = NTYPE_POSTMAN;
 
   registered[0x2D3745F5] = NTYPE_SAMPLER;
   registered[0x2218D91E] = NTYPE_SAMPLER;
