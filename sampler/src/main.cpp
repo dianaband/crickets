@@ -34,21 +34,24 @@ SdFatSdioEX SD;
 #define SDCARD_SCK_PIN   13  // not actually used
 
 // GUItool: begin automatically generated code
-AudioPlaySdWav playSdWav1;               //xy=224,265
-AudioSynthWaveformSine sine1;            //xy=236,361
-AudioMixer4 mixer2;                      //xy=497,328
-AudioMixer4 mixer1;                      //xy=499,245
-AudioAmplifier amp1;                     //xy=633,245
-AudioAmplifier amp2;                     //xy=634,328
-AudioOutputAnalogStereo dacs1;           //xy=788,284
-AudioConnection patchCord1(playSdWav1, 0, mixer1, 0);
-AudioConnection patchCord2(playSdWav1, 1, mixer2, 0);
-AudioConnection patchCord3(sine1, 0, mixer1, 1);
-AudioConnection patchCord4(sine1, 0, mixer2, 1);
-AudioConnection patchCord5(mixer2, amp2);
-AudioConnection patchCord6(mixer1, amp1);
-AudioConnection patchCord7(amp1, 0, dacs1, 0);
-AudioConnection patchCord8(amp2, 0, dacs1, 1);
+AudioPlaySdWav playSdWav2;               //xy=204,420
+AudioPlaySdWav playSdWav1;               //xy=210,251
+AudioSynthWaveformSine sine1;            //xy=222,347
+AudioMixer4 mixer2;                      //xy=483,314
+AudioMixer4 mixer1;                      //xy=485,231
+AudioAmplifier amp1;                     //xy=619,231
+AudioAmplifier amp2;                     //xy=620,314
+AudioOutputAnalogStereo dacs1;           //xy=774,270
+AudioConnection patchCord1(playSdWav2, 0, mixer1, 2);
+AudioConnection patchCord2(playSdWav2, 1, mixer2, 2);
+AudioConnection patchCord3(playSdWav1, 0, mixer1, 0);
+AudioConnection patchCord4(playSdWav1, 1, mixer2, 0);
+AudioConnection patchCord5(sine1, 0, mixer1, 1);
+AudioConnection patchCord6(sine1, 0, mixer2, 1);
+AudioConnection patchCord7(mixer2, amp2);
+AudioConnection patchCord8(mixer1, amp1);
+AudioConnection patchCord9(amp1, 0, dacs1, 0);
+AudioConnection patchCord10(amp2, 0, dacs1, 1);
 // GUItool: end automatically generated code
 
 //task
@@ -121,6 +124,73 @@ Task sample_player_start_task(0, TASK_ONCE, sample_player_start);
 Task sample_player_stop_task(0, TASK_ONCE, sample_player_stop);
 Task sample_player_check_task(0, TASK_FOREVER, sample_player_check, &runner, true);
 
+// second SET
+int sample2_now = 0; //0~99
+void sample2_player_start()
+{
+  //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
+  char filename[13] = "NN.WAV";
+  //search for the sound file
+  int limit = (sample2_now % 100);       // 0~99
+  filename[0] = '0' + (limit / 10);       // [N]N.WAV
+  filename[1] = '0' + (limit % 10);       // N[N].WAV
+  //TEST
+  Serial.println(filename);
+  AudioNoInterrupts();
+  bool test = SD.exists(filename);
+  AudioInterrupts();
+  if (!test) {
+    Serial.println("... does not exist.");
+    return;
+  }
+  //start the player!
+  //NOTE: block out 're-triggering'
+  // if (playSdWav2.isPlaying() == false) {
+  playSdWav2.play(filename);
+  // }
+  //mark the indicator : HIGH: ON
+  digitalWrite(13, HIGH);
+  //to wait a bit for updating isPlaying()
+  delay(10);
+}
+void sample2_player_stop() {
+  //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
+  char filename[13] = "NN.WAV";
+  //search for the sound file
+  int limit = (sample2_now % 100);       // 0~99
+  filename[0] = '0' + (limit / 10);       // [N]N.WAV
+  filename[1] = '0' + (limit % 10);       // N[N].WAV
+  //TEST
+  Serial.println(filename);
+  AudioNoInterrupts();
+  bool test = SD.exists(filename);
+  AudioInterrupts();
+  if (!test) {
+    Serial.println("... does not exist.");
+    return;
+  }
+  //stop the player.
+  if (playSdWav2.isPlaying() == true) {
+    playSdWav2.stop();
+  }
+}
+void sample2_player_check() {
+  if (playSdWav2.isPlaying() == false) {
+    //mark the indicator : LOW: OFF
+    digitalWrite(13, LOW);
+    //let speaker leave turned ON!
+    sine1.amplitude(IDLE_AMP);
+  }
+  else {
+    //let speaker leave turned ON!
+    sine1.amplitude(0);
+  }
+}
+//
+Task sample2_player_start_task(0, TASK_ONCE, sample2_player_start);
+Task sample2_player_stop_task(0, TASK_ONCE, sample2_player_stop);
+Task sample2_player_check_task(0, TASK_FOREVER, sample2_player_check, &runner, true);
+
 //i2c
 #include <Wire.h>
 #include "../post_sampler.h"
@@ -165,21 +235,49 @@ void receiveEvent(int numBytes) {
 
     //
     int key = str_key.toInt();
-    sample_now = key;
-    //
     int velocity = str_velocity.toInt(); // 0 ~ 127
+    int gate = str_gate.toInt();
+    static int last_voice = 0;
+
+    //
+    if (gate == 0) {
+      if (key == sample_now) {
+        sample_player_stop_task.restart();
+        Serial.println("sample_player_stop_task");
+      } else if (key == sample2_now) {
+        sample2_player_stop_task.restart();
+        Serial.println("sample2_player_stop_task");
+      }
+    } else {
+      if (playSdWav1.isPlaying() == false) {
+        sample_now = key;
+        sample_player_start_task.restart();
+        last_voice = 1;
+        Serial.println("sample_player_start_task");
+      } else if (playSdWav2.isPlaying() == false) {
+        sample2_now = key;
+        sample2_player_start_task.restart();
+        last_voice = 2;
+        Serial.println("sample2_player_start_task");
+      } else {
+        if (last_voice == 1) {
+          sample2_now = key;
+          sample2_player_start_task.restart();
+          last_voice = 2;
+          Serial.println("sample2_player_start_task");
+        } else if (last_voice == 2) {
+          sample_now = key;
+          sample_player_start_task.restart();
+          last_voice = 2;
+          Serial.println("sample_player_start_task");
+        }
+      }
+    }
+
+    //
     float amp_gain = (float)velocity / 127.0;
     amp1.gain(amp_gain);
     amp2.gain(amp_gain);
-    //
-    int gate = str_gate.toInt();
-    if (gate == 0) {
-      sample_player_stop_task.restart();
-      Serial.println("sample_player_stop_task");
-    } else {
-      sample_player_start_task.restart();
-      Serial.println("sample_player_start_task");
-    }
   }
 }
 
@@ -235,18 +333,18 @@ void setup() {
   printDirectory(root, 0);
 
   //audio
-  AudioMemory(20);
+  AudioMemory(40);
 #if !defined(TEENSY36)
   //NOTE!! teensy36 board.. output broken? .. so disable this for teensy36.. this is the cause??
   dacs1.analogReference(EXTERNAL);
 #endif
   mixer1.gain(0,1.0);
   mixer1.gain(1,1.0);
-  mixer1.gain(2,0);
+  mixer1.gain(2,1.0);
   mixer1.gain(3,0);
   mixer2.gain(0,1.0);
   mixer2.gain(1,1.0);
-  mixer2.gain(2,0);
+  mixer2.gain(2,1.0);
   mixer2.gain(3,0);
   amp1.gain(1.0);
   amp2.gain(1.0);
@@ -261,6 +359,8 @@ void setup() {
   //player task
   runner.addTask(sample_player_start_task);
   runner.addTask(sample_player_stop_task);
+  runner.addTask(sample2_player_start_task);
+  runner.addTask(sample2_player_stop_task);
 
   //
   Serial.println("[setup] done.");
