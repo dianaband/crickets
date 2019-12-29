@@ -16,14 +16,14 @@
 // (part-3) teensy35 : 'client:sampler' (mesh post --> play sounds)
 //
 
-//HACK: let auto-poweroff speakers stay turned ON! - (creative muvo mini)
-#define IDLE_FREQ 22000
-#define IDLE_AMP 0 // --> creative muvo 2 doesn't need this. they just stay on!
+//
+// 2019 12 29
+//
+// multiple sound playback -> 4 voices -- TESTING
+//
 
 //teensy audio
 #include <Audio.h>
-// #include <SPI.h>
-// #include <SD.h>
 #include <SdFat.h>
 SdFatSdioEX SD;
 #include <SerialFlash.h>
@@ -34,162 +34,226 @@ SdFatSdioEX SD;
 #define SDCARD_SCK_PIN   13  // not actually used
 
 // GUItool: begin automatically generated code
-AudioPlaySdWav playSdWav2;               //xy=204,420
-AudioPlaySdWav playSdWav1;               //xy=210,251
-AudioSynthWaveformSine sine1;            //xy=222,347
-AudioMixer4 mixer2;                      //xy=483,314
-AudioMixer4 mixer1;                      //xy=485,231
-AudioAmplifier amp1;                     //xy=619,231
-AudioAmplifier amp2;                     //xy=620,314
-AudioOutputAnalogStereo dacs1;           //xy=774,270
-AudioConnection patchCord1(playSdWav2, 0, mixer1, 2);
-AudioConnection patchCord2(playSdWav2, 1, mixer2, 2);
-AudioConnection patchCord3(playSdWav1, 0, mixer1, 0);
-AudioConnection patchCord4(playSdWav1, 1, mixer2, 0);
-AudioConnection patchCord5(sine1, 0, mixer1, 1);
-AudioConnection patchCord6(sine1, 0, mixer2, 1);
-AudioConnection patchCord7(mixer2, amp2);
-AudioConnection patchCord8(mixer1, amp1);
-AudioConnection patchCord9(amp1, 0, dacs1, 0);
-AudioConnection patchCord10(amp2, 0, dacs1, 1);
+AudioPlaySdWav playSdWav1;               //xy=183,90
+AudioPlaySdWav playSdWav2;               //xy=185,253
+AudioPlaySdWav playSdWav3;           //xy=187,411
+AudioPlaySdWav playSdWav4;           //xy=188,579
+AudioAmplifier amp1;                     //xy=374,49
+AudioAmplifier amp2;                     //xy=375,132
+AudioAmplifier amp3;           //xy=377,219
+AudioAmplifier amp4;           //xy=378,302
+AudioAmplifier amp5;           //xy=378,370
+AudioAmplifier amp6;           //xy=379,453
+AudioAmplifier amp7;           //xy=381,540
+AudioAmplifier amp8;           //xy=382,623
+AudioMixer4 mixer2;                      //xy=620,413
+AudioMixer4 mixer1;                      //xy=621,210
+AudioOutputAnalogStereo dacs1;           //xy=812,318
+AudioConnection patchCord1(playSdWav1, 0, amp1, 0);
+AudioConnection patchCord2(playSdWav1, 1, amp2, 0);
+AudioConnection patchCord3(playSdWav2, 0, amp3, 0);
+AudioConnection patchCord4(playSdWav2, 1, amp4, 0);
+AudioConnection patchCord5(playSdWav3, 0, amp5, 0);
+AudioConnection patchCord6(playSdWav3, 1, amp6, 0);
+AudioConnection patchCord7(playSdWav4, 0, amp7, 0);
+AudioConnection patchCord8(playSdWav4, 1, amp8, 0);
+AudioConnection patchCord9(amp1, 0, mixer1, 0);
+AudioConnection patchCord10(amp2, 0, mixer2, 0);
+AudioConnection patchCord11(amp3, 0, mixer1, 1);
+AudioConnection patchCord12(amp4, 0, mixer2, 1);
+AudioConnection patchCord13(amp5, 0, mixer1, 2);
+AudioConnection patchCord14(amp6, 0, mixer2, 2);
+AudioConnection patchCord15(amp7, 0, mixer1, 3);
+AudioConnection patchCord16(amp8, 0, mixer2, 3);
+AudioConnection patchCord17(mixer2, 0, dacs1, 1);
+AudioConnection patchCord18(mixer1, 0, dacs1, 0);
 // GUItool: end automatically generated code
+
+//
+class Voice {
+  //private
+
+  //teensy audio
+  AudioPlaySdWav& player;
+  AudioAmplifier& ampL;
+  AudioAmplifier& ampR;
+
+  // a filename buffer
+  char filename[13];
+
+public:
+
+  //
+  int note_now;
+  int velocity_now;
+
+  //
+  Voice(AudioPlaySdWav& player_, AudioAmplifier& ampL_, AudioAmplifier& ampR_)
+    : player(player_)
+    , ampL(ampL_)
+    , ampR(ampR_)
+  {
+    //initializations
+    note_now = 0;
+    velocity_now = 0;
+    strcpy(filename, "NN.WAV");
+  }
+
+  //
+  void noteOn(int note) {
+    // present my 'note' -> 'occupied'.
+    note_now = note;
+    // set filename to play...
+    int nn = (note % 100);           // 0~99
+    filename[0] = '0' + (nn / 10);   // [N]N.WAV
+    filename[1] = '0' + (nn % 10);   // N[N].WAV
+    // the filename to play is...
+    Serial.println(filename);
+    // go! (re-triggering)
+    player.play(filename);
+    // --> we just believe that this 'note' is available. NO additional checking.
+  }
+  //
+  void noteOff() {
+    player.stop();
+    // present my 'note' -> 'free'.
+    note_now = 0;
+  }
+  //
+  void setVelocity(int val) {
+    float vv = (float)val / 127; // allowing +gain for values over 127.
+    ampL.gain(vv);
+    ampR.gain(vv);
+  }
+  //
+  bool isPlaying() {
+    return player.isPlaying();
+  }
+};
+
+// voice banks
+#include <vector>
+#include <deque>
+static Voice __voice_1(playSdWav1, amp1, amp2);
+static Voice __voice_2(playSdWav2, amp3, amp4);
+static Voice __voice_3(playSdWav3, amp5, amp6);
+static Voice __voice_4(playSdWav4, amp7, amp8);
+static std::vector<Voice> poly_bank;
+static std::deque< std::pair<int, int> > poly_queue;
 
 //task
 #include <TaskScheduler.h>
 Scheduler runner;
-//sample #
-int sample_now = 0; //0~99
-void sample_player_start()
+// polyphonics
+static int note_sched = 0;
+static int velocity_sched = 0;
+void scheduleNoteOn()
 {
   //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
-  char filename[13] = "NN.WAV";
+  char fname[13] = "NN.WAV";
   //search for the sound file
-  int limit = (sample_now % 100);       // 0~99
-  filename[0] = '0' + (limit / 10);       // [N]N.WAV
-  filename[1] = '0' + (limit % 10);       // N[N].WAV
+  int limit = (note_sched % 100);          // 0~99
+  fname[0] = '0' + (limit / 10);     // [N]N.WAV
+  fname[1] = '0' + (limit % 10);     // N[N].WAV
   //TEST
-  Serial.println(filename);
+  Serial.println(fname);
   AudioNoInterrupts();
-  bool test = SD.exists(filename);
+  bool test = SD.exists(fname);
   AudioInterrupts();
   if (!test) {
     Serial.println("... does not exist.");
     return;
   }
-  //start the player!
-  //NOTE: block out 're-triggering'
-  // if (playSdWav1.isPlaying() == false) {
-  playSdWav1.play(filename);
-  // }
-  //mark the indicator : HIGH: ON
-  digitalWrite(13, HIGH);
-  //to wait a bit for updating isPlaying()
-  delay(10);
+  //ok, let's schedule a voice
+  //btw, is it already playing?
+  bool is_already = false;
+  for (uint32_t idx = 0; idx < poly_queue.size(); idx++) {
+    if (poly_queue[idx].first == note_sched) {
+      //oh, it is alreay playing
+      is_already = true;
+      // --> what to do?
+      // (1) re-trigger (stop-and-restart)
+      Voice& v = poly_bank[poly_queue[idx].second];
+      v.noteOff();
+      delay(10); // slight wait.
+      v.noteOn(note_sched);
+      v.setVelocity(velocity_sched);
+      // (2) do nothing (just let it play till end)
+      // (3) trigger a new one? (schedule a new one overlapping)
+      break;
+    }
+  }
+  //it's sth. new..
+  if (is_already == false) {
+    //fine, is there idle voice?
+    bool is_found_idle = false;
+    for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
+      if (poly_bank[idx].note_now == 0) {
+        //cool, got one.
+        is_found_idle = true;
+        //play start-up
+        Voice& v = poly_bank[idx];
+        v.noteOn(note_sched);
+        v.setVelocity(velocity_sched);
+        //leave a record : (# of voice bank, playing note #)
+        poly_queue.push_back(std::pair<int, int>(idx, note_sched));
+        // std::pair<int, int> description(idx, note_sched);
+        // poly_queue.push_back(description);
+        break;
+      }
+    }
+    //oh, no idle one!
+    if (is_found_idle == false) {
+      //then, who's the oldest?
+      int oldest = poly_queue.front().first;
+      poly_bank[oldest].noteOff();
+      poly_queue.pop_front();
+      //
+      int newentry = oldest;
+      //
+      Voice& v = poly_bank[newentry];
+      v.noteOn(note_sched);
+      v.setVelocity(velocity_sched);
+      //leave a record : (# of voice bank, playing note #)
+      poly_queue.push_back(std::pair<int, int>(newentry, note_sched));
+      // std::pair<int, int> description(idx, note_sched);
+      // poly_queue.push_back(description);
+    }
+  }
+  //small waiting time for 'isPlaying' update?
+  // delay(10);
 }
-void sample_player_stop() {
-  //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
-  char filename[13] = "NN.WAV";
-  //search for the sound file
-  int limit = (sample_now % 100);       // 0~99
-  filename[0] = '0' + (limit / 10);       // [N]N.WAV
-  filename[1] = '0' + (limit % 10);       // N[N].WAV
-  //TEST
-  Serial.println(filename);
-  AudioNoInterrupts();
-  bool test = SD.exists(filename);
-  AudioInterrupts();
-  if (!test) {
-    Serial.println("... does not exist.");
-    return;
-  }
-  //stop the player.
-  if (playSdWav1.isPlaying() == true) {
-    playSdWav1.stop();
-  }
-}
-void sample_player_check() {
-  if (playSdWav1.isPlaying() == false) {
-    //mark the indicator : LOW: OFF
-    digitalWrite(13, LOW);
-    //let speaker leave turned ON!
-    sine1.amplitude(IDLE_AMP);
-  }
-  else {
-    //let speaker leave turned ON!
-    sine1.amplitude(0);
+//
+Task scheduleNoteOn_task(0, TASK_ONCE, scheduleNoteOn);
+//
+void scheduleNoteOff() {
+  for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
+    if (poly_bank[idx].note_now == note_sched) {
+      poly_bank[idx].noteOff();
+    }
   }
 }
 //
-Task sample_player_start_task(0, TASK_ONCE, sample_player_start);
-Task sample_player_stop_task(0, TASK_ONCE, sample_player_stop);
-Task sample_player_check_task(0, TASK_FOREVER, sample_player_check, &runner, true);
+Task scheduleNoteOff_task(0, TASK_ONCE, scheduleNoteOff);
 
-// second SET
-int sample2_now = 0; //0~99
-void sample2_player_start()
-{
-  //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
-  char filename[13] = "NN.WAV";
-  //search for the sound file
-  int limit = (sample2_now % 100);       // 0~99
-  filename[0] = '0' + (limit / 10);       // [N]N.WAV
-  filename[1] = '0' + (limit % 10);       // N[N].WAV
-  //TEST
-  Serial.println(filename);
-  AudioNoInterrupts();
-  bool test = SD.exists(filename);
-  AudioInterrupts();
-  if (!test) {
-    Serial.println("... does not exist.");
-    return;
+//
+void playcheck() {
+  bool is_nosound = true;
+  for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
+    if (poly_bank[idx].isPlaying()) {
+      is_nosound = false;
+    }
   }
-  //start the player!
-  //NOTE: block out 're-triggering'
-  // if (playSdWav2.isPlaying() == false) {
-  playSdWav2.play(filename);
-  // }
-  //mark the indicator : HIGH: ON
-  digitalWrite(13, HIGH);
-  //to wait a bit for updating isPlaying()
-  delay(10);
-}
-void sample2_player_stop() {
-  //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
-  char filename[13] = "NN.WAV";
-  //search for the sound file
-  int limit = (sample2_now % 100);       // 0~99
-  filename[0] = '0' + (limit / 10);       // [N]N.WAV
-  filename[1] = '0' + (limit % 10);       // N[N].WAV
-  //TEST
-  Serial.println(filename);
-  AudioNoInterrupts();
-  bool test = SD.exists(filename);
-  AudioInterrupts();
-  if (!test) {
-    Serial.println("... does not exist.");
-    return;
-  }
-  //stop the player.
-  if (playSdWav2.isPlaying() == true) {
-    playSdWav2.stop();
-  }
-}
-void sample2_player_check() {
-  if (playSdWav2.isPlaying() == false) {
+  if (is_nosound) {
     //mark the indicator : LOW: OFF
     digitalWrite(13, LOW);
-    //let speaker leave turned ON!
-    sine1.amplitude(IDLE_AMP);
-  }
-  else {
-    //let speaker leave turned ON!
-    sine1.amplitude(0);
+  } else {
+    //mark the indicator : HIGH: ON
+    digitalWrite(13, HIGH);
   }
 }
 //
-Task sample2_player_start_task(0, TASK_ONCE, sample2_player_start);
-Task sample2_player_stop_task(0, TASK_ONCE, sample2_player_stop);
-Task sample2_player_check_task(0, TASK_FOREVER, sample2_player_check, &runner, true);
+Task playcheck_task(100, TASK_FOREVER, playcheck, &runner, true);
 
 //i2c
 #include <Wire.h>
@@ -237,47 +301,16 @@ void receiveEvent(int numBytes) {
     int key = str_key.toInt();
     int velocity = str_velocity.toInt(); // 0 ~ 127
     int gate = str_gate.toInt();
-    static int last_voice = 0;
 
     //
     if (gate == 0) {
-      if (key == sample_now) {
-        sample_player_stop_task.restart();
-        Serial.println("sample_player_stop_task");
-      } else if (key == sample2_now) {
-        sample2_player_stop_task.restart();
-        Serial.println("sample2_player_stop_task");
-      }
+      note_sched = key;
+      scheduleNoteOff_task.restart();
     } else {
-      if (playSdWav1.isPlaying() == false) {
-        sample_now = key;
-        sample_player_start_task.restart();
-        last_voice = 1;
-        Serial.println("sample_player_start_task");
-      } else if (playSdWav2.isPlaying() == false) {
-        sample2_now = key;
-        sample2_player_start_task.restart();
-        last_voice = 2;
-        Serial.println("sample2_player_start_task");
-      } else {
-        if (last_voice == 1) {
-          sample2_now = key;
-          sample2_player_start_task.restart();
-          last_voice = 2;
-          Serial.println("sample2_player_start_task");
-        } else if (last_voice == 2) {
-          sample_now = key;
-          sample_player_start_task.restart();
-          last_voice = 2;
-          Serial.println("sample_player_start_task");
-        }
-      }
+      note_sched = key;
+      velocity_sched = velocity;
+      scheduleNoteOn_task.restart();
     }
-
-    //
-    float amp_gain = (float)velocity / 127.0;
-    amp1.gain(amp_gain);
-    amp2.gain(amp_gain);
   }
 }
 
@@ -321,10 +354,8 @@ void setup() {
   // DISABLED.. due to bi-directional I2C hardship. ==> use UART.
   // Wire.onRequest(requestEvent);
 
-  //SD - AudioPlaySdWav @ teensy audio library needs SD.begin() first. don't forget/ignore!
-  //+ let's additionally check contents of SD.
+  //SD
   if (!SD.begin()) {
-    // if (!SD.begin(BUILTIN_SDCARD)) {
     Serial.println("[sd] initialization failed!");
     return;
   }
@@ -332,35 +363,48 @@ void setup() {
   root = SD.open("/");
   printDirectory(root, 0);
 
+  //polyphonics - 4 voices
+  poly_bank.push_back(__voice_1);
+  poly_bank.push_back(__voice_2);
+  poly_bank.push_back(__voice_3);
+  poly_bank.push_back(__voice_4);
+
   //audio
-  AudioMemory(40);
+  AudioMemory(120);
 #if !defined(TEENSY36)
-  //NOTE!! teensy36 board.. output broken? .. so disable this for teensy36.. this is the cause??
-  dacs1.analogReference(EXTERNAL);
+  //NOTE!! teensy36 board..
+  //       output broken? ..
+  //       so disable this for teensy36..
+  //       this is the cause??
+  // dacs1.analogReference(EXTERNAL);
 #endif
   mixer1.gain(0,1.0);
   mixer1.gain(1,1.0);
   mixer1.gain(2,1.0);
-  mixer1.gain(3,0);
+  mixer1.gain(3,1.0);
   mixer2.gain(0,1.0);
   mixer2.gain(1,1.0);
   mixer2.gain(2,1.0);
-  mixer2.gain(3,0);
+  mixer2.gain(3,1.0);
   amp1.gain(1.0);
   amp2.gain(1.0);
+  amp3.gain(1.0);
+  amp4.gain(1.0);
+  amp5.gain(1.0);
+  amp6.gain(1.0);
+  amp7.gain(1.0);
+  amp8.gain(1.0);
 
-  //let auto-poweroff speakers stay turned ON!
-  sine1.frequency(IDLE_FREQ);
+  //tasks
+  runner.addTask(playcheck_task);
+  playcheck_task.enable();
+  //
+  runner.addTask(scheduleNoteOn_task);
+  runner.addTask(scheduleNoteOff_task);
 
   //led
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW); // LOW: OFF
-
-  //player task
-  runner.addTask(sample_player_start_task);
-  runner.addTask(sample_player_stop_task);
-  runner.addTask(sample2_player_start_task);
-  runner.addTask(sample2_player_stop_task);
 
   //
   Serial.println("[setup] done.");
