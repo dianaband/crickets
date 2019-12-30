@@ -33,6 +33,9 @@
 // #define ANALOG_REF_EXTERNAL_3P3V
 //----------</configuration>----------
 
+//watchdog
+#include <Adafruit_SleepyDog.h>
+
 //teensy audio
 #include <Audio.h>
 #include <SdFat.h>
@@ -121,7 +124,7 @@ public:
     // the filename to play is...
     Serial.println(filename);
     // go! (re-triggering)
-    if (player.isPlaying()) player.stop();
+    // if (player.isPlaying()) player.stop();
     player.play(filename);
     Serial.println("1");
     // --> we just believe that this 'file' is existing & available. NO additional checking.
@@ -303,6 +306,9 @@ void playcheck() {
   // //
   // Serial.print("AM_max:");
   // Serial.println(AudioMemoryUsageMax());
+
+  //watchdog
+  Watchdog.reset();
 }
 //
 Task playcheck_task(100, TASK_FOREVER, playcheck, &runner, true);
@@ -462,6 +468,9 @@ void setup() {
 
   //
   Serial.println("[setup] done.");
+
+  //watchdog
+  Watchdog.enable(1000);
 }
 
 void loop() {
