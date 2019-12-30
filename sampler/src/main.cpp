@@ -22,6 +22,17 @@
 // multiple sound playback -> 4 voices -- TESTING
 //
 
+//----------<configuration>----------
+//
+// 'ANALOG_REF_EXTERNAL_3P3V'
+// --> this will output 3.3v-pp from dacs pins of the board.
+//     outdoor or big space. you will need this.
+//     but, teensy36 board dacs pins once might have burned off cause of this?
+//     teensy35 was okay since they are stronger (5V compatible I/O)
+//
+// #define ANALOG_REF_EXTERNAL_3P3V
+//----------</configuration>----------
+
 //teensy audio
 #include <Audio.h>
 #include <SdFat.h>
@@ -110,17 +121,25 @@ public:
     // the filename to play is...
     Serial.println(filename);
     // go! (re-triggering)
+    if (player.isPlaying()) player.stop();
     player.play(filename);
-    // --> we just believe that this 'note' is available. NO additional checking.
+    Serial.println("1");
+    // --> we just believe that this 'file' is existing & available. NO additional checking.
+    delay(10);
+    Serial.println("2");
+    // --> let's wait a bit before exit, to give more room to work for background workers(==filesystem|audio-interrupts)
+    // --> if we get too fast 'player.play' twice, then the system might get broken/stalled. ?
   }
   //
   void noteOff() {
     player.stop();
+    delay(10); // wait to close file?
     // present my 'note' -> 'free'.
     note_now = 0;
   }
   //
   void setVelocity(int val) {
+    if (val < 0) val = 0;
     float vv = (float)val / 127; // allowing +gain for values over 127.
     ampL.gain(vv);
     ampR.gain(vv);
@@ -152,9 +171,9 @@ void scheduleNoteOn()
   //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
   char fname[13] = "NN.WAV";
   //search for the sound file
-  int limit = (note_sched % 100);          // 0~99
-  fname[0] = '0' + (limit / 10);     // [N]N.WAV
-  fname[1] = '0' + (limit % 10);     // N[N].WAV
+  int note = (note_sched % 100);    // 0~99
+  fname[0] = '0' + (note / 10);     // [N]N.WAV
+  fname[1] = '0' + (note % 10);     // N[N].WAV
   //TEST
   Serial.println(fname);
   AudioNoInterrupts();
@@ -166,21 +185,27 @@ void scheduleNoteOn()
   }
   //ok, let's schedule a voice
   //btw, is it already playing?
+  // --> entry : (# of voice bank, playing note #)
   bool is_already = false;
   for (uint32_t idx = 0; idx < poly_queue.size(); idx++) {
-    if (poly_queue[idx].first == note_sched) {
+    if (poly_queue[idx].second == note) {
       //oh, it is alreay playing
-      is_already = true;
       // --> what to do?
       // (1) re-trigger (stop-and-restart)
-      Voice& v = poly_bank[poly_queue[idx].second];
+      is_already = true;
+      Voice& v = poly_bank[poly_queue[idx].first];
       v.noteOff();
-      delay(10); // slight wait.
-      v.noteOn(note_sched);
+      v.noteOn(note);
       v.setVelocity(velocity_sched);
-      // (2) do nothing (just let it play till end)
-      // (3) trigger a new one? (schedule a new one overlapping)
       break;
+      // (2) do nothing (just let it play till end)
+      // is_already = true;
+      // break;
+      // (3) trigger a new one? (schedule a new one overlapping)
+      // --> then you just ignore the fact.
+      //     i.e. do not tick 'is_already = true',
+      //     then a new one will be automatically assigned.
+      // break;
     }
   }
   //it's sth. new..
@@ -193,12 +218,10 @@ void scheduleNoteOn()
         is_found_idle = true;
         //play start-up
         Voice& v = poly_bank[idx];
-        v.noteOn(note_sched);
+        v.noteOn(note);
         v.setVelocity(velocity_sched);
         //leave a record : (# of voice bank, playing note #)
-        poly_queue.push_back(std::pair<int, int>(idx, note_sched));
-        // std::pair<int, int> description(idx, note_sched);
-        // poly_queue.push_back(description);
+        poly_queue.push_back(std::pair<int, int>(idx, note));
         break;
       }
     }
@@ -212,26 +235,52 @@ void scheduleNoteOn()
       int newentry = oldest;
       //
       Voice& v = poly_bank[newentry];
-      v.noteOn(note_sched);
+      v.noteOn(note);
       v.setVelocity(velocity_sched);
       //leave a record : (# of voice bank, playing note #)
-      poly_queue.push_back(std::pair<int, int>(newentry, note_sched));
-      // std::pair<int, int> description(idx, note_sched);
-      // poly_queue.push_back(description);
+      poly_queue.push_back(std::pair<int, int>(newentry, note));
     }
   }
   //small waiting time for 'isPlaying' update?
   // delay(10);
+  //monitoring the queue
+  Serial.println("--notoOn:poly_queue---");
+  Serial.println("(voice#, note#)");
+  for (uint32_t idx = 0; idx < poly_queue.size(); idx++) {
+    Serial.print("(");
+    Serial.print(poly_queue[idx].first);
+    Serial.print(", ");
+    Serial.print(poly_queue[idx].second);
+    Serial.println(")");
+  }
+  Serial.println();
 }
 //
 Task scheduleNoteOn_task(0, TASK_ONCE, scheduleNoteOn);
 //
 void scheduleNoteOff() {
-  for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
-    if (poly_bank[idx].note_now == note_sched) {
-      poly_bank[idx].noteOff();
+  for (auto it = poly_queue.begin(); it != poly_queue.end(); ++it) {
+    //is this meaningful, btw?
+    if ((*it).second == note_sched) {
+      //okay. we've got that.
+      Serial.println("okay. we've got that.");
+      //a record : (# of voice bank, playing note #)
+      poly_bank[(*it).first].noteOff(); // stop the bank
+      poly_queue.erase(it); // remove the record
+      break;
     }
   }
+  //monitoring the queue
+  Serial.println("--notoOff:poly_queue---");
+  Serial.println("(voice#, note#)");
+  for (uint32_t idx = 0; idx < poly_queue.size(); idx++) {
+    Serial.print("(");
+    Serial.print(poly_queue[idx].first);
+    Serial.print(", ");
+    Serial.print(poly_queue[idx].second);
+    Serial.println(")");
+  }
+  Serial.println();
 }
 //
 Task scheduleNoteOff_task(0, TASK_ONCE, scheduleNoteOff);
@@ -251,6 +300,9 @@ void playcheck() {
     //mark the indicator : HIGH: ON
     digitalWrite(13, HIGH);
   }
+  // //
+  // Serial.print("AM_max:");
+  // Serial.println(AudioMemoryUsageMax());
 }
 //
 Task playcheck_task(100, TASK_FOREVER, playcheck, &runner, true);
@@ -370,13 +422,15 @@ void setup() {
   poly_bank.push_back(__voice_4);
 
   //audio
-  AudioMemory(120);
+  AudioMemory(20); // <-- used AudioMemoryUsageMax() to check out!
 #if !defined(TEENSY36)
   //NOTE!! teensy36 board..
   //       output broken? ..
   //       so disable this for teensy36..
   //       this is the cause??
-  // dacs1.analogReference(EXTERNAL);
+#if defined(ANALOG_REF_EXTERNAL_3P3V)
+  dacs1.analogReference(EXTERNAL);
+#endif
 #endif
   mixer1.gain(0,1.0);
   mixer1.gain(1,1.0);
@@ -396,8 +450,8 @@ void setup() {
   amp8.gain(1.0);
 
   //tasks
-  runner.addTask(playcheck_task);
-  playcheck_task.enable();
+  // runner.addTask(playcheck_task);
+  // playcheck_task.enable();
   //
   runner.addTask(scheduleNoteOn_task);
   runner.addTask(scheduleNoteOff_task);
