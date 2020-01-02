@@ -43,7 +43,8 @@
 //==========</preset>==========
 
 //============<gastank>============
-#define GASTANK_KEY 100
+#define GASTANK_SIDE_KEY 100
+#define GASTANK_HEAD_KEY 101
 //============</gastank>===========
 
 //============<parameters>============
@@ -153,31 +154,64 @@ void nothappyalone() {
 Task nothappyalone_task(100, TASK_FOREVER, &nothappyalone); // by default, ENABLED.
 
 // servo
-#define SERVO_PIN D6
 #include <Servo.h>
-static Servo myservo;
 
 // my tasks
-// ringring.
-extern Task servo_release_task;
-void ringring() {
+
+// ring_side.
+static Servo side;
+extern Task side_release_task;
+void ring_side() {
   int angle = random(80, 125);
   //
-  Serial.print("ringring go -> ");
+  Serial.print("ring_side go -> ");
   Serial.print(angle);
   Serial.println(" deg.");
   //
-  myservo.attach(D6);
-  myservo.write(angle);
-  servo_release_task.restartDelayed(100);
+  side.attach(D6);
+  side.write(angle);
+  side_release_task.restartDelayed(100);
 }
-Task ringring_task(0, TASK_ONCE, &ringring);
+Task ring_side_task(0, TASK_ONCE, &ring_side);
+void side_release() {
+  side.detach();
+}
+Task side_release_task(0, TASK_ONCE, &side_release);
 
-// servo release
-void servo_release() {
-  myservo.detach();
+// ring_head.
+static Servo head;
+extern Task head_release_task;
+extern Task ring_head_task;
+// ring_head!
+void ring_head() {
+  static int count = 0;
+  if (ring_head_task.isFirstIteration()) {
+    count = 0;
+    Serial.println("ring_head! start.");
+  }
+  if (count % 3 == 0) {
+    //
+    head.attach(D5);
+    head.write(170);
+    //
+  } else if (count % 3 == 1) {
+    //
+    head.detach();
+    //
+  } else {
+    //
+    head.attach(D5);
+    head.write(100);
+    head_release_task.restartDelayed(100);
+  }
+  //
+  count++;
 }
-Task servo_release_task(0, TASK_ONCE, &servo_release);
+Task ring_head_task(100, 3, &ring_head);
+void head_release() {
+  head.detach();
+}
+Task head_release_task(0, TASK_ONCE, &head_release);
 
 // mesh callbacks
 void receivedCallback(uint32_t from, String & msg) { // REQUIRED
@@ -209,8 +243,11 @@ void receivedCallback(uint32_t from, String & msg) { // REQUIRED
   int gate = str_gate.toInt();
 
   //is it for me, the gastank?
-  if (key == GASTANK_KEY && gate == 1) {
-    ringring_task.restartDelayed(10);
+  if (key == GASTANK_SIDE_KEY && gate == 1) {
+    ring_side_task.restartDelayed(10);
+  }
+  if (key == GASTANK_HEAD_KEY && gate == 1) {
+    ring_head_task.restartDelayed(10);
   }
 }
 void changedConnectionCallback() {
@@ -322,8 +359,11 @@ void setup() {
   Wire.begin();
 
   //tasks
-  runner.addTask(servo_release_task);
-  runner.addTask(ringring_task);
+  runner.addTask(ring_side_task);
+  runner.addTask(side_release_task);
+  //
+  runner.addTask(ring_head_task);
+  runner.addTask(head_release_task);
 }
 
 void loop() {
