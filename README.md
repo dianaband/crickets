@@ -1,4 +1,4 @@
-# crickets for cosmo40 performance
+# crickets for RTA performance
 
 ## platformio
 
