@@ -6,26 +6,23 @@
 //
 
 //
+// COSMO40 @ Incheon w/ Factory2
 // RTA @ Seoul w/ Post Territory Ujeongguk
 //
 
 //
-// 2020 1 2
+// 2019 12 11
 //
 // (part-2) teensy35 : 'client:osc' (osc over slip --> mesh post)
 //
-// collect following MIDI-like. OSC msg.
-// + extra. direction msg. ('/timing/offset', '/timing/loop', '/timing/interval')
+// especially, MIDI-like.
+// collect following OSC msg.
 //
 // "/note/onoff"
 // "/note/velocity"
-// "/note/pitch"
-//       +
-// "/timing/offset"
-// "/timing/loop"
-// "/timing/interval"
+// "/note/key"
 //
-// and build one letter post.
+// and build a MIDI-like letter post.
 // and give it to the postman
 //
 
@@ -36,22 +33,13 @@
 //    : [123456789012345678901234567890]
 // 'MIDI' letter frame
 //    : [123456789012345678901234567890]
-//    : [KKKVVVGOOOOOLIIIII............]
+//    : [KKKVVVG.......................]
 //    : KKK - Key
 //      .substring(1, 4);
 //    : VVV - Velocity (volume/amp.)
 //      .substring(4, 7);
 //    : G - Gate (note on/off)
 //      .substring(7, 8);
-//    : O - timing offset (plz start after this milli-sec)
-//      .substring(8, 13);
-//    : L - looping mode (plz do no/auto/manual-looping)
-//      .substring(13, 14);
-//        L == 1 -> no-looping. play once.
-//        L == 2 -> auto-restart when the playback ends.
-//        L == 3 -> restart after 'timing interval' milli-sec.
-//    : I - looping interval (only valid for 'manual-looping')
-//      .substring(14, 19); ==> check 'special cases' first.
 //
 
 //arduino
@@ -104,37 +92,6 @@ void setup() {
 }
 
 //
-static int t_offset = 0;
-static int t_loop = 0;
-static int t_interval = 0;
-void timingnote(OSCMessage& msg, int offset) {
-  // matches will happen in the order. that the bundle is packed.
-  // (1) --> /offset
-  if (msg.fullMatch("/offset", offset)) {
-    //
-    t_offset = 0;
-    t_loop = 0;
-    t_interval = 0;
-    //
-    t_offset = msg.getInt(0);
-    if (t_offset < 0) t_offset = 0;
-    if (t_offset > 99999) t_offset = 99999;
-  }
-  // (2) --> /loop
-  if (msg.fullMatch("/loop", offset)) {
-    t_loop = msg.getInt(0);
-    if (t_loop < 1) t_loop = 1;
-    if (t_loop > 9) t_loop = 9;
-  }
-  // (3) --> /interval
-  if (msg.fullMatch("/interval", offset)) {
-    //
-    t_interval = msg.getInt(0);
-    if (t_interval < 0) t_interval = 0;
-    if (t_interval > 99999) t_interval = 99999;
-  }
-}
-//
 void midinote(OSCMessage& msg, int offset) {
   // matches will happen in the order. that the bundle is packed.
   static int pitch = 0;
@@ -163,7 +120,7 @@ void midinote(OSCMessage& msg, int offset) {
     if (pitch > 127) pitch = 127;
     //
     // while (new_letter != false) {}; // <-- sort of semaphore.. but it doesn't work yet.. buggy.
-    sprintf(letter_outro, "[%03d%03d%01d%05d%01d%05d............]", pitch, velocity, onoff, t_offset, t_loop, t_interval);
+    sprintf(letter_outro, "[%03d%03d%01d.......................]", pitch, velocity, onoff);
     new_letter = true;
   }
 }
@@ -183,7 +140,6 @@ void loop() {
   }
   if(!bundleIN.hasError()) {
     bundleIN.route("/note", midinote);
-    bundleIN.route("/timing", timingnote);
   }
   // else {
   //   str = "error! : " + String(bundleIN.getError());

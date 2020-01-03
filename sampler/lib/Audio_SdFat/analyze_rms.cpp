@@ -36,7 +36,7 @@ void AudioAnalyzeRMS::update(void)
 		count++;
 		return;
 	}
-#if defined(__ARM_ARCH_7EM__)
+#if defined(KINETISK)
 	uint32_t *p = (uint32_t *)(block->data);
 	uint32_t *end = p + AUDIO_BLOCK_SAMPLES/2;
 	int64_t sum = accum;

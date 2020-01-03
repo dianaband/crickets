@@ -64,7 +64,7 @@
 
 //==========<preset>===========
 // (1) the backbone AP
-#if 0
+#if 1
 #define DISABLE_I2C_REQ
 #define SET_CONTAINSROOT
 // (2) osc client (the ROOT)
@@ -72,7 +72,7 @@
 #define SET_ROOT
 #define SET_CONTAINSROOT
 // (3) sampler client
-#elif 1
+#elif 0
 #define DISABLE_AP
 #define DISABLE_I2C_REQ
 //

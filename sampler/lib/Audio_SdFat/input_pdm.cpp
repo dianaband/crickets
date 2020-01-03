@@ -24,8 +24,6 @@
  * THE SOFTWARE.
  */
 
- #if !defined(__IMXRT1052__) && !defined(__IMXRT1062__)
- 
 #include <Arduino.h>
 #include "input_pdm.h"
 #include "utility/dspinst.h"
@@ -84,17 +82,12 @@ DMAChannel AudioInputPDM::dma(false);
   #define MCLK_MULT 1
   #define MCLK_DIV  17
 #elif F_CPU == 216000000
-  #define MCLK_MULT 12
-  #define MCLK_DIV  17
-  #define MCLK_SRC  1
-#elif F_CPU == 240000000
-  #define MCLK_MULT 2
-  #define MCLK_DIV  85
+  #define MCLK_MULT 8
+  #define MCLK_DIV  153
   #define MCLK_SRC  0
-#elif F_CPU == 256000000
-  #define MCLK_MULT 12
-  #define MCLK_DIV  17
-  #define MCLK_SRC  1
+#elif F_CPU == 240000000
+  #define MCLK_MULT 4
+  #define MCLK_DIV  85
 #elif F_CPU == 16000000
   #define MCLK_MULT 12
   #define MCLK_DIV  17
@@ -1719,4 +1712,3 @@ for ($n=0; $n < 512; $n += 8) {
 print "\n};\n";
 print "// max=$max, min=$min\n";
 */
-#endif

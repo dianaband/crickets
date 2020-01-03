@@ -71,11 +71,11 @@ bool AudioPlaySdWav::play(const char *filename)
   wavfile.open(filename);
   __enable_irq();
   if (!wavfile) {
-#if defined(HAS_KINETIS_SDHC)
+        #if defined(HAS_KINETIS_SDHC)
     if (!(SIM_SCGC3 & SIM_SCGC3_SDHC)) AudioStopUsingSPI();
-#else
+        #else
     AudioStopUsingSPI();
-#endif
+        #endif
     return false;
   }
   buffer_length = 0;
@@ -100,11 +100,11 @@ void AudioPlaySdWav::stop(void)
     if (b1) release(b1);
     if (b2) release(b2);
     wavfile.close();
-#if defined(HAS_KINETIS_SDHC)
+        #if defined(HAS_KINETIS_SDHC)
     if (!(SIM_SCGC3 & SIM_SCGC3_SDHC)) AudioStopUsingSPI();
-#else
+        #else
     AudioStopUsingSPI();
-#endif
+        #endif
   } else {
     __enable_irq();
   }
@@ -142,7 +142,7 @@ void AudioPlaySdWav::update(void)
   n = buffer_length - buffer_offset;
   if (n > 0) {
     // we have buffered data
-    if (consume(n)) return; // it was enough to transmit audio
+    if (consume(n)) return;             // it was enough to transmit audio
   }
 
   // we only get to this point when buffer[512] is empty
@@ -291,7 +291,7 @@ start:
     break;
 
   // find the data chunk
-  case STATE_PARSE3: // 10
+  case STATE_PARSE3:         // 10
     len = data_length;
     if (size < len) len = size;
     memcpy((uint8_t *)header + header_offset, p, len);
@@ -327,7 +327,7 @@ start:
     goto start;
 
   // ignore any extra unknown chunks (title & artist info)
-  case STATE_PARSE4: // 11
+  case STATE_PARSE4:         // 11
     if (size < data_length) {
       data_length -= size;
       buffer_offset += size;
@@ -479,17 +479,17 @@ right16:
 
 
 /*
-  00000000  52494646 66EA6903 57415645 666D7420  RIFFf.i.WAVEfmt
-  00000010  10000000 01000200 44AC0000 10B10200  ........D.......
-  00000020  04001000 4C495354 3A000000 494E464F  ....LIST:...INFO
-  00000030  494E414D 14000000 49205761 6E742054  INAM....I Want T
-  00000040  6F20436F 6D65204F 76657200 49415254  o Come Over.IART
-  00000050  12000000 4D656C69 73736120 45746865  ....Melissa Ethe
-  00000060  72696467 65006461 746100EA 69030100  ridge.data..i...
-  00000070  FEFF0300 FCFF0400 FDFF0200 0000FEFF  ................
-  00000080  0300FDFF 0200FFFF 00000100 FEFF0300  ................
-  00000090  FDFF0300 FDFF0200 FFFF0100 0000FFFF  ................
-*/
+   00000000  52494646 66EA6903 57415645 666D7420  RIFFf.i.WAVEfmt
+   00000010  10000000 01000200 44AC0000 10B10200  ........D.......
+   00000020  04001000 4C495354 3A000000 494E464F  ....LIST:...INFO
+   00000030  494E414D 14000000 49205761 6E742054  INAM....I Want T
+   00000040  6F20436F 6D65204F 76657200 49415254  o Come Over.IART
+   00000050  12000000 4D656C69 73736120 45746865  ....Melissa Ethe
+   00000060  72696467 65006461 746100EA 69030100  ridge.data..i...
+   00000070  FEFF0300 FCFF0400 FDFF0200 0000FEFF  ................
+   00000080  0300FDFF 0200FFFF 00000100 FEFF0300  ................
+   00000090  FDFF0300 FDFF0200 FFFF0100 0000FFFF  ................
+ */
 
 
 

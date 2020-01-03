@@ -29,7 +29,7 @@
 #include "utility/dspinst.h"
 
 
-#if defined(__ARM_ARCH_7EM__)
+#if defined(KINETISK)
 
 void AudioSynthWaveformPWM::update(void)
 {

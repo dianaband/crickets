@@ -24,8 +24,6 @@
  * THE SOFTWARE.
  */
 
-#if !defined(__IMXRT1052__) && !defined(__IMXRT1062__)
- 
 #include <Arduino.h>
 #include "input_adc.h"
 #include "utility/pdb.h"
@@ -213,4 +211,3 @@ void AudioInputAnalog::update(void)
 	transmit(out_left);
 	release(out_left);
 }
-#endif

@@ -28,7 +28,7 @@
 #include "analyze_tonedetect.h"
 #include "utility/dspinst.h"
 
-#if defined(__ARM_ARCH_7EM__)
+#if defined(KINETISK)
 
 static inline int32_t multiply_32x32_rshift30(int32_t a, int32_t b) __attribute__((always_inline));
 static inline int32_t multiply_32x32_rshift30(int32_t a, int32_t b)
