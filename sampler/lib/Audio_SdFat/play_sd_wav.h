@@ -43,7 +43,7 @@ public:
   uint32_t lengthMillis(void);
   virtual void update(void);
 private:
-  File wavfile;
+  FsFile wavfile;
   bool consume(uint32_t size);
   bool parse_format(void);
   uint32_t header[10];            // temporary storage of wav header data

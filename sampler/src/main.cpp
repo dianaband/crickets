@@ -6,20 +6,11 @@
 //
 
 //
-// COSMO40 @ Incheon w/ Factory2
 // RTA @ Seoul w/ Post Territory Ujeongguk
 //
 
 //
-// 2019 12 11
-//
 // (part-3) teensy35 : 'client:sampler' (mesh post --> play sounds)
-//
-
-//
-// 2019 12 29
-//
-// multiple sound playback -> 4 voices -- TESTING
 //
 
 //----------<configuration>----------
@@ -31,21 +22,57 @@
 //     teensy35 was okay since they are stronger (5V compatible I/O)
 //
 // #define ANALOG_REF_EXTERNAL_3P3V
+//
+// 'LED_INDICATOR'
+// --> this will enable red LED on/off according to the file playback status.
+//
+#define LED_INDICATOR
+//
+// 'USE_SD'
+// --> a original sd card driver..
+//
+// #define USE_SD
+//
+// 'USE_SDFATSDIO'
+// --> a faster sd card driver..
+//
+// #define USE_SDFATSDIO
+//
+// 'USE_SDFATBETA'
+// --> a faster sd card driver..
+//
+#define USE_SDFATBETA
 //----------</configuration>----------
 
 //watchdog
 #include <Adafruit_SleepyDog.h>
 
 //teensy audio
+#if defined(USE_SD)
+#include <Audio.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
+#include <SerialFlash.h>
+#define xFile File
+//
+#elif defined(USE_SDFATSDIO)
 #include <Audio.h>
 #include <SdFat.h>
-SdFatSdioEX SD;
+SdFatSdio SD;
+// SdFatSdioEX SD;
 #include <SerialFlash.h>
-
-//teensy 3.5 with SD card
-#define SDCARD_CS_PIN    BUILTIN_SDCARD
-#define SDCARD_MOSI_PIN  11  // not actually used
-#define SDCARD_SCK_PIN   13  // not actually used
+#define xFile File
+//
+#elif defined(USE_SDFATBETA)
+#include <Audio.h>
+#include <SdFat.h>
+#include <SerialFlash.h>
+SdFs SD;
+#define xFile FsFile
+// SdExFat SD;
+// #define xFile ExFile
+#endif
 
 // GUItool: begin automatically generated code
 AudioPlaySdWav playSdWav1;               //xy=183,90
@@ -83,8 +110,54 @@ AudioConnection patchCord17(mixer2, 0, dacs1, 1);
 AudioConnection patchCord18(mixer1, 0, dacs1, 0);
 // GUItool: end automatically generated code
 
+//threads
+#include <TeensyThreads.h>
+//following class is from --> https://github.com/ftrias/TeensyThreads/blob/master/examples/Runnable/
+class Runnable {
+private:
+protected:
+  virtual void runTarget(void *arg) = 0;
+public:
+  virtual ~Runnable(){
+  }
+
+  static void runThread(void *arg) {
+    Runnable *_runnable = static_cast<Runnable*> (arg);
+    _runnable->runTarget(arg);
+  }
+};
+
+//NOTE: using TeensyThreads == nightmare of 'volatile' problems.
+// ==> wrap all the variables that is used to comm. between threads into a 'global' & 'volatile' object..
+class vVoice {
+public:
+  int note_now;
+  int velocity_now;
+  int start_offset;
+  bool note_on_req;
+  bool note_off_req;
+  bool is_playing;
+
+  vVoice() {
+    note_now = 0;
+    velocity_now = 0;
+    start_offset = 0;
+    note_on_req = false;
+    note_off_req = false;
+    is_playing = false;
+  }
+
+  vVoice(const vVoice &vv) {
+    note_now = vv.note_now;
+    velocity_now = vv.velocity_now;
+    start_offset = vv.start_offset;
+    note_on_req = vv.note_on_req;
+    note_off_req = vv.note_off_req;
+    is_playing = vv.is_playing;
+  }
+};
 //
-class Voice {
+class Voice : public Runnable {
   //private
 
   //teensy audio
@@ -92,83 +165,105 @@ class Voice {
   AudioAmplifier& ampL;
   AudioAmplifier& ampR;
 
-  // a filename buffer
-  char filename[13];
+  //teensythreads
+  std::thread* thrd;
+
+protected:
+  //teensythreads
+  void runTarget(void *arg) {
+
+    // a filename buffer
+    char filename[13] = "NN.WAV";
+
+    //
+    while(1) {
+      {
+        Threads::Scope m(mx);
+
+        // 'note off' request
+        if (vv.note_off_req == true) {
+          vv.note_off_req = false;
+          player.stop();
+          vv.note_now = 0; // declare that [i'm free.]
+          vv.is_playing = false;
+        }
+        // 'note on' request
+        else if (vv.note_on_req == true) {
+          vv.note_on_req = false;
+          // set filename to play...
+          int nn = (vv.note_now % 100);   // 0~99
+          filename[0] = '0' + (nn / 10);   // [N]N.WAV
+          filename[1] = '0' + (nn % 10);   // N[N].WAV
+          // the filename to play is...
+          Serial.println(filename);
+          // go! (re-triggering)
+          // threads.delay(vv.start_offset); // <-- so.. this also means 'yield' so.. sth. unexpected happening here? so, we cannot do this? -> SAD.
+          AudioNoInterrupts(); // maybe .. 'AudioNoInterrupts' helps for the stability?
+          // apply gains
+          int val = vv.velocity_now;
+          if (val < 0) val = 0;
+          float gg = (float)val / 127; // allowing +gain for values over 127.
+          ampL.gain(gg);
+          ampR.gain(gg);
+          bool res = player.play(filename);
+          Serial.print("player.play -> "); Serial.println(res); // maybe.. meaningless? play() is kinda blocking call... -> SAD
+          AudioInterrupts();
+          // --> we just believe that this 'file' is existing & available. NO additional checking.
+          // threads.delay(10);
+          // --> let's wait a bit before exit, to give more room to work for background workers(==filesystem|audio-interrupts)
+          // --> if we get too fast 'player.play' twice, then the system might get broken/stalled. ?
+          vv.is_playing = true;
+        }
+      }
+
+      //
+      threads.yield();
+      // threads.delay(5);
+    }
+  }
 
 public:
 
-  //
-  int note_now;
-  int velocity_now;
+  //mutex
+  Threads::Mutex& mx; // BETTER hav only 1 mutex. for all? so, only 1 change can happen at a time.
+
+  //variables for Voice
+  volatile vVoice& vv;
 
   //
-  Voice(AudioPlaySdWav& player_, AudioAmplifier& ampL_, AudioAmplifier& ampR_)
-    : player(player_)
-    , ampL(ampL_)
-    , ampR(ampR_)
-  {
-    //initializations
-    note_now = 0;
-    velocity_now = 0;
-    strcpy(filename, "NN.WAV");
+  Voice(AudioPlaySdWav& player_, AudioAmplifier& ampL_, AudioAmplifier& ampR_, Threads::Mutex& mx_, volatile vVoice& vv_)
+    : player(player_), ampL(ampL_), ampR(ampR_), mx(mx_), vv(vv_) {
   }
 
-  //
-  void noteOn(int note) {
-    // present my 'note' -> 'occupied'.
-    note_now = note;
-    // set filename to play...
-    int nn = (note % 100);           // 0~99
-    filename[0] = '0' + (nn / 10);   // [N]N.WAV
-    filename[1] = '0' + (nn % 10);   // N[N].WAV
-    // the filename to play is...
-    Serial.println(filename);
-    // go! (re-triggering)
-    // if (player.isPlaying()) player.stop();
-    player.play(filename);
-    Serial.println("1");
-    // --> we just believe that this 'file' is existing & available. NO additional checking.
-    delay(10);
-    Serial.println("2");
-    // --> let's wait a bit before exit, to give more room to work for background workers(==filesystem|audio-interrupts)
-    // --> if we get too fast 'player.play' twice, then the system might get broken/stalled. ?
-  }
-  //
-  void noteOff() {
-    player.stop();
-    delay(10); // wait to close file?
-    // present my 'note' -> 'free'.
-    note_now = 0;
-  }
-  //
-  void setVelocity(int val) {
-    if (val < 0) val = 0;
-    float vv = (float)val / 127; // allowing +gain for values over 127.
-    ampL.gain(vv);
-    ampR.gain(vv);
-  }
-  //
-  bool isPlaying() {
-    return player.isPlaying();
+  //threading
+  void start() {
+    thrd = new std::thread(&Runnable::runThread, this);
   }
 };
 
 // voice banks
 #include <vector>
 #include <deque>
-static Voice __voice_1(playSdWav1, amp1, amp2);
-static Voice __voice_2(playSdWav2, amp3, amp4);
-static Voice __voice_3(playSdWav3, amp5, amp6);
-static Voice __voice_4(playSdWav4, amp7, amp8);
+//NOTE: stronger locking? there's only 1 locking mutex.
+Threads::Mutex __mx;
+//NOTE: using TeensyThreads == nightmare of 'volatile' problems.
+// ==> wrap all the variables that is used to comm. between threads into a 'global' & 'volatile' object..
+static volatile vVoice __vv1;
+static volatile vVoice __vv2;
+// static volatile vVoice __vv3;
+// static volatile vVoice __vv4;
+// ==> and link global volatile objects to the actual objects like :
+static Voice __voice_1(playSdWav1, amp1, amp2, __mx, __vv1);
+static Voice __voice_2(playSdWav2, amp3, amp4, __mx, __vv2);
+// static Voice __voice_3(playSdWav3, amp5, amp6, __mx, __vv3);
+// static Voice __voice_4(playSdWav4, amp7, amp8, __mx, __vv4);
 static std::vector<Voice> poly_bank;
 static std::deque< std::pair<int, int> > poly_queue;
 
-//task
-#include <TaskScheduler.h>
-Scheduler runner;
 // polyphonics
 static int note_sched = 0;
 static int velocity_sched = 0;
+static int offset_sched = 0;
 void scheduleNoteOn()
 {
   //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
@@ -197,9 +292,13 @@ void scheduleNoteOn()
       // (1) re-trigger (stop-and-restart)
       is_already = true;
       Voice& v = poly_bank[poly_queue[idx].first];
-      v.noteOff();
-      v.noteOn(note);
-      v.setVelocity(velocity_sched);
+      {
+        Threads::Scope m(v.mx);
+        v.vv.note_now = note;
+        v.vv.velocity_now = velocity_sched;
+        v.vv.start_offset = offset_sched;
+        v.vv.note_on_req = true;
+      }
       break;
       // (2) do nothing (just let it play till end)
       // is_already = true;
@@ -216,30 +315,40 @@ void scheduleNoteOn()
     //fine, is there idle voice?
     bool is_found_idle = false;
     for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
-      if (poly_bank[idx].note_now == 0) {
-        //cool, got one.
-        is_found_idle = true;
-        //play start-up
-        Voice& v = poly_bank[idx];
-        v.noteOn(note);
-        v.setVelocity(velocity_sched);
-        //leave a record : (# of voice bank, playing note #)
-        poly_queue.push_back(std::pair<int, int>(idx, note));
-        break;
+      Voice& v = poly_bank[idx];
+      {
+        Threads::Scope m(v.mx);
+        if (v.vv.note_now == 0) {
+          //cool, got one.
+          is_found_idle = true;
+          //play start-up
+          v.vv.note_now = note;
+          v.vv.velocity_now = velocity_sched;
+          v.vv.start_offset = offset_sched;
+          v.vv.note_on_req = true;
+          //leave a record : (# of voice bank, playing note #)
+          poly_queue.push_back(std::pair<int, int>(idx, note));
+          break;
+        }
       }
     }
     //oh, no idle one!
     if (is_found_idle == false) {
       //then, who's the oldest?
       int oldest = poly_queue.front().first;
-      poly_bank[oldest].noteOff();
+      //poly_bank[oldest].noteOff();
       poly_queue.pop_front();
       //
       int newentry = oldest;
       //
       Voice& v = poly_bank[newentry];
-      v.noteOn(note);
-      v.setVelocity(velocity_sched);
+      {
+        Threads::Scope m(v.mx);
+        v.vv.note_now = note;
+        v.vv.velocity_now = velocity_sched;
+        v.vv.start_offset = offset_sched;
+        v.vv.note_on_req = true;
+      }
       //leave a record : (# of voice bank, playing note #)
       poly_queue.push_back(std::pair<int, int>(newentry, note));
     }
@@ -259,8 +368,6 @@ void scheduleNoteOn()
   Serial.println();
 }
 //
-Task scheduleNoteOn_task(0, TASK_ONCE, scheduleNoteOn);
-//
 void scheduleNoteOff() {
   for (auto it = poly_queue.begin(); it != poly_queue.end(); ++it) {
     //is this meaningful, btw?
@@ -268,7 +375,11 @@ void scheduleNoteOff() {
       //okay. we've got that.
       Serial.println("okay. we've got that.");
       //a record : (# of voice bank, playing note #)
-      poly_bank[(*it).first].noteOff(); // stop the bank
+      Voice& v = poly_bank[(*it).first];
+      {
+        Threads::Scope m(v.mx);
+        v.vv.note_off_req = true; // stop the bank
+      }
       poly_queue.erase(it); // remove the record
       break;
     }
@@ -285,33 +396,38 @@ void scheduleNoteOff() {
   }
   Serial.println();
 }
-//
-Task scheduleNoteOff_task(0, TASK_ONCE, scheduleNoteOff);
 
 //
 void playcheck() {
-  bool is_nosound = true;
-  for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
-    if (poly_bank[idx].isPlaying()) {
-      is_nosound = false;
+  while(1) {
+#if defined(LED_INDICATOR)
+    bool is_nosound = true;
+    for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
+      Voice& v = poly_bank[idx];
+      {
+        Threads::Scope m(v.mx);
+        if (v.vv.is_playing) is_nosound = false;
+      }
     }
-  }
-  if (is_nosound) {
-    //mark the indicator : LOW: OFF
-    digitalWrite(13, LOW);
-  } else {
-    //mark the indicator : HIGH: ON
-    digitalWrite(13, HIGH);
-  }
-  // //
-  // Serial.print("AM_max:");
-  // Serial.println(AudioMemoryUsageMax());
+    if (is_nosound) {
+      //mark the indicator : LOW: OFF
+      digitalWrite(13, LOW);
+    } else {
+      //mark the indicator : HIGH: ON
+      digitalWrite(13, HIGH);
+    }
+#endif
 
-  //watchdog
-  Watchdog.reset();
+    // //
+    // Serial.print("AM_max:");
+    // Serial.println(AudioMemoryUsageMax());
+
+    //watchdog
+    Watchdog.reset();
+
+    threads.delay(100);
+  }
 }
-//
-Task playcheck_task(100, TASK_FOREVER, playcheck, &runner, true);
 
 //i2c
 #include <Wire.h>
@@ -340,71 +456,91 @@ void receiveEvent(int numBytes) {
 
     // 'MIDI' letter frame
     //    : [123456789012345678901234567890]
-    //    : [KKKVVVG.......................]
+    //    : [KKKVVVGOOOOOLIIIII............]
     //    : KKK - Key
     //      .substring(1, 4);
     //    : VVV - Velocity (volume/amp.)
     //      .substring(4, 7);
     //    : G - Gate (note on/off)
     //      .substring(7, 8);
+    //    : O - timing offset (plz start after this milli-sec)
+    //      .substring(8, 13);
+    //    : L - looping mode (plz do no/auto/manual-looping)
+    //      .substring(13, 14);
+    //        L == 1 -> no-looping. play once.
+    //        L == 2 -> auto-restart when the playback ends.
+    //        L == 3 -> restart after 'timing interval' milli-sec.
+    //    : I - looping interval (only valid for 'manual-looping')
+    //      .substring(14, 19); ==> check 'special cases' first.
 
     String str_key = msg.substring(1, 4);
     String str_velocity = msg.substring(4, 7);
     String str_gate = msg.substring(7, 8);
-    // Serial.println(str_key);
-    // Serial.println(str_velocity);
-    // Serial.println(str_gate);
+    String str_offset = msg.substring(8, 13);
+    String str_loop = msg.substring(13, 14);
+    String str_interval = msg.substring(14, 19);
 
     //
     int key = str_key.toInt();
     int velocity = str_velocity.toInt(); // 0 ~ 127
     int gate = str_gate.toInt();
+    int offset = str_offset.toInt();
+    int loop = str_loop.toInt();
+    int interval = str_interval.toInt();
 
     //
     if (gate == 0) {
       note_sched = key;
-      scheduleNoteOff_task.restart();
+      scheduleNoteOff();
     } else {
       note_sched = key;
       velocity_sched = velocity;
-      scheduleNoteOn_task.restart();
+      offset_sched = offset;
+      scheduleNoteOn();
     }
   }
 }
 
 // SD TEST
-void printDirectory(File dir, int numTabs) {
+void printDirectory(xFile dir, int numTabs) {
+  char filename[256] = "";
   while(true) {
 
-    File entry =  dir.openNextFile();
+    xFile entry =  dir.openNextFile();
     if (!entry) {
-      // no more files
-      Serial.println("**nomorefiles**");
       break;
     }
     for (uint8_t i=0; i<numTabs; i++) {
       Serial.print('\t');
     }
+#if defined(USE_SD)
     Serial.print(entry.name());
+#elif defined(USE_SDFATSDIO)
+    entry.getName(filename, 256);
+    Serial.print(filename);
+#elif defined(USE_SDFATBETA)
+    entry.getName(filename, 256);
+    Serial.print(filename);
+#endif
     if (entry.isDirectory()) {
       Serial.println("/");
       printDirectory(entry, numTabs+1);
     } else {
       // files have sizes, directories do not
       Serial.print("\t\t");
-      Serial.println(entry.size(), DEC);
+      Serial.println((unsigned int)entry.size(), DEC);
     }
     entry.close();
   }
 }
 
 //
-File root;
+xFile root;
 void setup() {
 
   //serial monitor
   Serial.begin(115200);
-  delay(50);
+  while (!Serial) {}
 
   //i2c
   Wire.begin(I2C_ADDR);
@@ -413,7 +549,14 @@ void setup() {
   // Wire.onRequest(requestEvent);
 
   //SD
-  if (!SD.begin()) {
+#if defined(USE_SD)
+  if (!(SD.begin(BUILTIN_SDCARD)))
+#elif defined(USE_SDFATSDIO)
+  if (!SD.begin())
+#elif defined(USE_SDFATBETA)
+  if (!SD.begin(SdioConfig(FIFO_SDIO)))
+#endif
+  {
     Serial.println("[sd] initialization failed!");
     return;
   }
@@ -422,10 +565,10 @@ void setup() {
   printDirectory(root, 0);
 
   //polyphonics - 4 voices
-  poly_bank.push_back(__voice_1);
-  poly_bank.push_back(__voice_2);
-  poly_bank.push_back(__voice_3);
-  poly_bank.push_back(__voice_4);
+  poly_bank.push_back(__voice_1); __voice_1.start();
+  poly_bank.push_back(__voice_2); __voice_2.start();
+  // poly_bank.push_back(__voice_3); __voice_3.start();
+  // poly_bank.push_back(__voice_4); __voice_4.start();
 
   //audio
   AudioMemory(20); // <-- used AudioMemoryUsageMax() to check out!
@@ -455,12 +598,8 @@ void setup() {
   amp7.gain(1.0);
   amp8.gain(1.0);
 
-  //tasks
-  // runner.addTask(playcheck_task);
-  // playcheck_task.enable();
-  //
-  runner.addTask(scheduleNoteOn_task);
-  runner.addTask(scheduleNoteOff_task);
+  //teensythreads
+  threads.addThread(playcheck);
 
   //led
   pinMode(13, OUTPUT);
@@ -470,9 +609,8 @@ void setup() {
   Serial.println("[setup] done.");
 
   //watchdog
-  Watchdog.enable(1000);
+  Watchdog.enable(3000);
 }
 
 void loop() {
-  runner.execute();
 }

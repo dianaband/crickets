@@ -89,7 +89,7 @@ void register_nodes(){
 #define MESH_PASSWORD "cc*vvvv/kkk"
 #define MESH_PORT 5555
 #define MESH_CHANNEL 5
-#define LONELY_TO_DIE    (1000)
+#define LONELY_TO_DIE (1000)
 //============</parameters>===========
 
 //
