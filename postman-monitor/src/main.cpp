@@ -48,12 +48,9 @@ void register_nodes(){
   registered[0x2D9EC96E] = NTYPE_MONITOR; // this one.
   registered[0x2D37150B] = NTYPE_MONITOR; // sub-monitor (old one)
 
-  registered[0x2219A51C] = NTYPE_OSC_ROOT;
+  registered[0x2D373B90] = NTYPE_OSC_ROOT;
 
-  registered[0xABB3B68F] = NTYPE_POSTMAN;
-  registered[0xC2B2AFD4] = NTYPE_POSTMAN;
   registered[0xABB3B758] = NTYPE_POSTMAN;
-  registered[0xABB3B5C2] = NTYPE_POSTMAN;
   registered[0xC21474D2] = NTYPE_POSTMAN;
   registered[0xABB3B4B8] = NTYPE_POSTMAN;
   registered[0x2D370A07] = NTYPE_POSTMAN;
@@ -62,22 +59,26 @@ void register_nodes(){
   registered[0x2D3718AE] = NTYPE_POSTMAN;
   registered[0xABB3BA44] = NTYPE_POSTMAN;
   registered[0xBFFD7FF1] = NTYPE_POSTMAN;
+  registered[0x3A58872D] = NTYPE_POSTMAN;
 
-  registered[0x2D3745F5] = NTYPE_SAMPLER;
-  registered[0x2218D91E] = NTYPE_SAMPLER;
-  registered[0xBC631984] = NTYPE_SAMPLER;
-  registered[0x22199605] = NTYPE_SAMPLER;
-  registered[0x3AD53EF3] = NTYPE_SAMPLER;
-  registered[0x3AD74D97] = NTYPE_SAMPLER;
-  registered[0xABB3B419] = NTYPE_SAMPLER;
-  registered[0xABB3B4DD] = NTYPE_SAMPLER;
-  registered[0x2D373B90] = NTYPE_SAMPLER;
+  registered[0x2D3745F5] = NTYPE_SAMPLER; //1
+  registered[0x2218D91E] = NTYPE_SAMPLER; //2
+  registered[0xBC631984] = NTYPE_SAMPLER; //3
+  registered[0x22199605] = NTYPE_SAMPLER; //4
+  registered[0x3AD53EF3] = NTYPE_SAMPLER; //5
+  registered[0x3AD74D97] = NTYPE_SAMPLER; //6
+  registered[0xABB3B419] = NTYPE_SAMPLER; //7
+  registered[0xABB3B4DD] = NTYPE_SAMPLER; //8
+  registered[0x2219A51C] = NTYPE_SAMPLER; //9
+  registered[0xC2B2AFD4] = NTYPE_SAMPLER; //a
+  registered[0x3AAB562D] = NTYPE_SAMPLER; //b
+  registered[0xABB3B5C2] = NTYPE_SAMPLER; //c
 
-  registered[0x2219ACD1] = NTYPE_SAMPLER; // round (old)
-  registered[0x2219A4A7] = NTYPE_SAMPLER; // round (old)
-  registered[0x22199CAD] = NTYPE_SAMPLER; // round (old)
-  registered[0x2218DEE3] = NTYPE_SAMPLER; // round (old)
-  registered[0x2218DFD5] = NTYPE_SAMPLER; // round (old)
+  registered[0x2219ACD1] = NTYPE_SAMPLER; //A round (old)
+  registered[0x2219A4A7] = NTYPE_SAMPLER; //B round (old)
+  registered[0x22199CAD] = NTYPE_SAMPLER; //C round (old)
+  registered[0x2218DEE3] = NTYPE_SAMPLER; //D round (old)
+  registered[0x2218DFD5] = NTYPE_SAMPLER; //E round (old)
 
   registered[0x2D371730] = NTYPE_GASTANK;
   registered[0x3A588030] = NTYPE_BUOY_FLY;
@@ -233,13 +234,13 @@ void loop_screen() {
     }
   }
   //
-  tft.fillRect(50, 210, 30, 30, HX8357_BLACK);
+  tft.fillRect(50, 210, 60, 30, HX8357_BLACK);
   tft.setCursor(50, 210);
   tft.setTextColor(HX8357_BLUE);
   tft.setTextSize(3);
   tft.print(cnt_postman);
   //
-  tft.fillRect(250, 210, 30, 30, HX8357_BLACK);
+  tft.fillRect(250, 210, 60, 30, HX8357_BLACK);
   tft.setCursor(250, 210);
   tft.setTextColor(HX8357_CYAN);
   tft.setTextSize(3);

@@ -111,13 +111,15 @@ void midinote(OSCMessage& msg, int offset) {
   if (msg.fullMatch("/velocity", offset)) {
     velocity = msg.getInt(0);
     if (velocity < 0) velocity = 0;
-    if (velocity > 127) velocity = 127;
+    // if (velocity > 127) velocity = 127;
+    if (velocity > 999) velocity = 999;
   }
   // (3) --> /pitch
   if (msg.fullMatch("/pitch", offset)) {
     pitch = msg.getInt(0);
     if (pitch < 0) pitch = 0;
-    if (pitch > 127) pitch = 127;
+    // if (pitch > 127) pitch = 127;
+    if (pitch > 999) pitch = 999;
     //
     // while (new_letter != false) {}; // <-- sort of semaphore.. but it doesn't work yet.. buggy.
     sprintf(letter_outro, "[%03d%03d%01d.......................]", pitch, velocity, onoff);

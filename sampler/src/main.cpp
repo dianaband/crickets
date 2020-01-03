@@ -31,6 +31,11 @@
 //     teensy35 was okay since they are stronger (5V compatible I/O)
 //
 // #define ANALOG_REF_EXTERNAL_3P3V
+//
+// 'LED_INDICATOR'
+// --> this will enable red LED on/off according to the file playback status.
+//
+#define LED_INDICATOR
 //----------</configuration>----------
 
 //watchdog
@@ -110,7 +115,7 @@ public:
     //initializations
     note_now = 0;
     velocity_now = 0;
-    strcpy(filename, "NN.WAV");
+    strcpy(filename, "NNN.WAV");
   }
 
   //
@@ -118,18 +123,18 @@ public:
     // present my 'note' -> 'occupied'.
     note_now = note;
     // set filename to play...
-    int nn = (note % 100);           // 0~99
-    filename[0] = '0' + (nn / 10);   // [N]N.WAV
-    filename[1] = '0' + (nn % 10);   // N[N].WAV
+    int nnn = (note % 1000);  // 0~999
+    int nn =  (note % 100);   // 0~99
+    filename[0] = '0' + (nnn / 100); // N__.WAV
+    filename[1] = '0' + (nn / 10);   // _N_.WAV
+    filename[2] = '0' + (nn % 10);   // __N.WAV
     // the filename to play is...
     Serial.println(filename);
     // go! (re-triggering)
     // if (player.isPlaying()) player.stop();
     player.play(filename);
-    Serial.println("1");
     // --> we just believe that this 'file' is existing & available. NO additional checking.
     delay(10);
-    Serial.println("2");
     // --> let's wait a bit before exit, to give more room to work for background workers(==filesystem|audio-interrupts)
     // --> if we get too fast 'player.play' twice, then the system might get broken/stalled. ?
   }
@@ -172,11 +177,14 @@ static int velocity_sched = 0;
 void scheduleNoteOn()
 {
   //filename buffer - 8.3 naming convension! 8+1+3+1 = 13
-  char fname[13] = "NN.WAV";
+  char fname[13] = "NNN.WAV";
   //search for the sound file
-  int note = (note_sched % 100);    // 0~99
-  fname[0] = '0' + (note / 10);     // [N]N.WAV
-  fname[1] = '0' + (note % 10);     // N[N].WAV
+  int note = note_sched;
+  int nnn = (note % 1000);  // 0~999
+  int nn =  (note % 100);   // 0~99
+  fname[0] = '0' + (nnn / 100); // N__.WAV
+  fname[1] = '0' + (nn / 10);   // _N_.WAV
+  fname[2] = '0' + (nn % 10);   // __N.WAV
   //TEST
   Serial.println(fname);
   AudioNoInterrupts();
@@ -289,7 +297,16 @@ void scheduleNoteOff() {
 Task scheduleNoteOff_task(0, TASK_ONCE, scheduleNoteOff);
 
 //
+extern Task playcheck_task;
 void playcheck() {
+  //
+  if (playcheck_task.isFirstIteration()) {
+    //watchdog
+    Watchdog.enable(1000);
+  }
+  //
+#if defined(LED_INDICATOR)
+  //
   bool is_nosound = true;
   for (uint32_t idx = 0; idx < poly_bank.size(); idx++) {
     if (poly_bank[idx].isPlaying()) {
@@ -303,15 +320,18 @@ void playcheck() {
     //mark the indicator : HIGH: ON
     digitalWrite(13, HIGH);
   }
+#endif
+
   // //
   // Serial.print("AM_max:");
   // Serial.println(AudioMemoryUsageMax());
 
   //watchdog
   Watchdog.reset();
+  // Serial.println("Watchdog.reset");
 }
 //
-Task playcheck_task(100, TASK_FOREVER, playcheck, &runner, true);
+Task playcheck_task(200, TASK_FOREVER, playcheck);
 
 //i2c
 #include <Wire.h>
@@ -374,18 +394,19 @@ void receiveEvent(int numBytes) {
 
 // SD TEST
 void printDirectory(File dir, int numTabs) {
+  char filename[256] = "";
   while(true) {
-
     File entry =  dir.openNextFile();
     if (!entry) {
       // no more files
-      Serial.println("**nomorefiles**");
       break;
     }
     for (uint8_t i=0; i<numTabs; i++) {
       Serial.print('\t');
     }
-    Serial.print(entry.name());
+    entry.getName(filename, 256);
+    Serial.print(filename);
+    // Serial.print(entry.name());
     if (entry.isDirectory()) {
       Serial.println("/");
       printDirectory(entry, numTabs+1);
@@ -404,7 +425,13 @@ void setup() {
 
   //serial monitor
   Serial.begin(115200);
-  // while (!Serial) {} // <-- use this.. to see start-up messages! very handy.
+  //
+  delay(50);
+  // <-- strange? but, this was needed !!
+  // w/o ==> get killed by watchdog.. :(
+  //
+  // while (!Serial) {}
+  //  --> use this.. to capture start-up messages, properly. very handy.
 
   //i2c
   Wire.begin(I2C_ADDR);
@@ -456,8 +483,8 @@ void setup() {
   amp8.gain(1.0);
 
   //tasks
-  // runner.addTask(playcheck_task);
-  // playcheck_task.enable();
+  runner.addTask(playcheck_task);
+  playcheck_task.restartDelayed(60000); // watchdog start after 60 sec. waiting task scheduling system stabilizing takes that so much time!
   //
   runner.addTask(scheduleNoteOn_task);
   runner.addTask(scheduleNoteOff_task);
@@ -468,9 +495,6 @@ void setup() {
 
   //
   Serial.println("[setup] done.");
-
-  //watchdog
-  Watchdog.enable(1000);
 }
 
 void loop() {
